@@ -80,20 +80,22 @@
     <!-- ═══════════════════════════════════════ MAIN CONTENT ══ -->
     <main id="main-content" class="main-content" aria-label="Área de práctica">
 
-      <!-- Case info bar -->
-      <div id="case-info-bar" class="case-info-bar">
-        <span id="info-set" class="info-badge info-set">—</span>
-        <span id="info-case" class="info-case">Selecciona casos para empezar</span>
-        <span id="info-alg-count" class="info-alg-count"></span>
-      </div>
-
-      <!-- Scramble display -->
-      <section id="scramble-section" class="scramble-section" aria-label="Scramble actual">
-        <p class="scramble-label">SCRAMBLE</p>
-        <div id="scramble-moves" class="scramble-moves" aria-live="polite">
-          <span class="scramble-placeholder">Cargando algoritmos…</span>
+      <div id="practice-top" class="practice-top">
+        <!-- Case info bar -->
+        <div id="case-info-bar" class="case-info-bar">
+          <span id="info-set" class="info-badge info-set">—</span>
+          <span id="info-case" class="info-case">Selecciona casos para empezar</span>
+          <span id="info-alg-count" class="info-alg-count"></span>
         </div>
-      </section>
+
+        <!-- Scramble display -->
+        <section id="scramble-section" class="scramble-section" aria-label="Scramble actual">
+          <p class="scramble-label">SCRAMBLE</p>
+          <div id="scramble-moves" class="scramble-moves" aria-live="polite">
+            <span class="scramble-placeholder">Cargando algoritmos…</span>
+          </div>
+        </section>
+      </div>
 
       <!-- ─────────────────────────────── TIMER AREA ── -->
       <section
@@ -139,7 +141,6 @@
               <p class="result-alg-label">Algoritmo:</p>
               <code id="result-alg-text" class="result-alg-code"></code>
               <p class="result-alg-case">
-                <span id="result-set-badge" class="info-badge"></span>
                 <span id="result-case-name"></span>
               </p>
             </div>

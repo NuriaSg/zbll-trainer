@@ -499,6 +499,15 @@ kbd {
   overflow-y: auto;
 }
 
+/* ─── Practice top (info + scramble) ─────────────────────────── */
+.practice-top {
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 /* ─── Case info bar ───────────────────────────────────────────── */
 .case-info-bar {
   display: flex;
@@ -1010,6 +1019,16 @@ th.sort-active .sort-arrow { opacity: 1; }
   body.sidebar-open { overflow: hidden; }
 
   .main-content { padding: 14px 14px 32px; gap: 16px; }
+
+  /* Keep scramble visible while result appears below */
+  .practice-top {
+    position: sticky;
+    top: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+    z-index: 20;
+    padding-bottom: 4px;
+    background: linear-gradient(to bottom, var(--bg-surface) 85%, transparent);
+  }
+
   .scramble-section { padding: 14px 16px; }
   .timer-area { padding: 20px 16px; }
   .scramble-moves { font-size: 0.9rem; }
@@ -1017,8 +1036,11 @@ th.sort-active .sort-arrow { opacity: 1; }
   .stats-panel { padding: 20px 14px 48px; }
   .stats-header { flex-direction: column; align-items: flex-start; }
 
+  .result-inner { padding: 14px; gap: 12px; }
+  .result-time-val { font-size: 1.6rem; }
   .result-case-row { flex-direction: column; align-items: center; }
-  .result-image-wrap { width: 140px; height: 140px; }
+  .result-image-wrap { width: 110px; height: 110px; }
+  .result-alg-code { font-size: 0.78rem; line-height: 1.45; }
 
   .toast-container { bottom: 12px; right: 12px; left: 12px; }
   .toast { max-width: 100%; }

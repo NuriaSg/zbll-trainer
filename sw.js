@@ -3,7 +3,7 @@
    Service Worker · Cache-First strategy
    ══════════════════════════════════════════════════════════════ */
 
-const APP_CACHE_NAME = 'zbll-trainer-v8';
+const APP_CACHE_NAME = 'zbll-trainer-v9';
 const THUMBS_CACHE_NAME = 'zbll-thumbs-v1';
 
 // Files to pre-cache on install (app shell + data)

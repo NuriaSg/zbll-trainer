@@ -52,6 +52,7 @@ const DOM = {
   infoCase:        $id('info-case'),
   infoAlgCount:    $id('info-alg-count'),
   // Scramble
+  practiceTop:     $id('practice-top'),
   scrambleMoves:   $id('scramble-moves'),
   // Timer
   timerArea:       $id('timer-area'),
@@ -65,7 +66,6 @@ const DOM = {
   caseImg:         $id('case-img'),
   caseImgFallback: $id('case-img-fallback'),
   resultAlgText:   $id('result-alg-text'),
-  resultSetBadge:  $id('result-set-badge'),
   resultCaseName:  $id('result-case-name'),
   // Stats
   statsPanel:      $id('stats-panel'),
@@ -728,8 +728,19 @@ function stopTimer() {
     renderStats();
   }
 
-  // Pick and show next scramble immediately
+  // Pick and show next scramble immediately, keep scramble in view
   displayScramble(pickRandomEntry());
+  scrollToPracticeTop('auto');
+}
+
+/** Keep scramble visible after result expands the page (especially on mobile). */
+function scrollToPracticeTop(behavior = 'auto') {
+  const target = DOM.practiceTop || document.getElementById('scramble-section');
+  if (!target) return;
+
+  const headerH = document.getElementById('app-header')?.offsetHeight ?? 58;
+  const top = target.getBoundingClientRect().top + window.scrollY - headerH - 8;
+  window.scrollTo({ top: Math.max(0, top), behavior });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -744,8 +755,7 @@ function showResult(entry, timeMs, isPB) {
   // Algorithm
   DOM.resultAlgText.textContent = entry.algorithm;
 
-  // Set + case name
-  DOM.resultSetBadge.textContent = entry.set_name;
+  // Case name
   DOM.resultCaseName.textContent = entry.case_name;
 
   // Update info bar case name now that solve is done
@@ -756,13 +766,20 @@ function showResult(entry, timeMs, isPB) {
   DOM.caseImg.classList.remove('hidden');
   DOM.caseImgFallback.classList.add('hidden');
 
-  DOM.caseImg.onload  = () => { DOM.caseImg.classList.remove('hidden'); DOM.caseImgFallback.classList.add('hidden'); };
-  DOM.caseImg.onerror = () => { DOM.caseImg.classList.add('hidden'); DOM.caseImgFallback.classList.remove('hidden'); };
+  DOM.caseImg.onload  = () => {
+    DOM.caseImg.classList.remove('hidden');
+    DOM.caseImgFallback.classList.add('hidden');
+    scrollToPracticeTop('auto');
+  };
+  DOM.caseImg.onerror = () => {
+    DOM.caseImg.classList.add('hidden');
+    DOM.caseImgFallback.classList.remove('hidden');
+  };
   DOM.caseImg.src     = url;
 
-  // Show section with animation
+  // Show section with animation (do not scroll down to result)
   DOM.resultSection.classList.remove('hidden');
-  DOM.resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  requestAnimationFrame(() => scrollToPracticeTop('auto'));
 }
 
 function hideResult() {
