@@ -1,0 +1,36 @@
+{
+  "name": "ZBLL Trainer",
+  "short_name": "ZBLL",
+  "description": "Practica los algoritmos ZBLL del cubo de Rubik 3×3 con cronómetro instantáneo y estadísticas. Funciona 100% offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#04091a",
+  "theme_color": "#0d1b3e",
+  "orientation": "any",
+  "lang": "es",
+  "categories": ["games", "sports", "productivity"],
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Practicar ahora",
+      "short_name": "Practicar",
+      "description": "Abre la app directamente en modo práctica",
+      "url": "./"
+    }
+  ]
+}

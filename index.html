@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Aplicación PWA para practicar los algoritmos ZBLL del cubo de Rubik 3×3. Funciona 100% offline con cronómetro instantáneo y estadísticas." />
+  <meta name="theme-color" content="#0d1b3e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ZBLL Trainer" />
+
+  <title>ZBLL Trainer — Cubo de Rubik 3×3</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="icon-512.png" />
+  <link rel="apple-touch-icon" href="icon-512.png" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════ HEADER ══ -->
+  <header id="app-header" class="app-header">
+    <div class="header-inner">
+      <button id="sidebar-toggle" class="icon-btn" aria-label="Abrir/cerrar selector de casos" aria-expanded="false">
+        <span class="hamburger" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+      </button>
+
+      <div class="header-brand">
+        <span class="brand-cube" aria-hidden="true">⬡</span>
+        <h1 class="brand-title">ZBLL <span class="brand-accent">Trainer</span></h1>
+      </div>
+
+      <div class="header-actions">
+        <div id="selected-count-badge" class="badge" title="Casos seleccionados">0 casos</div>
+        <button id="install-btn" class="btn btn-accent btn-sm" style="display:none" aria-label="Instalar aplicación">
+          ⬇ Instalar
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════ APP LAYOUT ══ -->
+  <div class="app-layout">
+
+    <!-- Mobile overlay -->
+    <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
+
+    <!-- ════════════════════════════════════════════ SIDEBAR ══ -->
+    <aside id="sidebar" class="sidebar" aria-label="Selector de casos ZBLL">
+      <div class="sidebar-head">
+        <h2 class="sidebar-title">Selección de Casos</h2>
+        <div class="sidebar-bulk-actions">
+          <button id="select-all-btn" class="btn btn-sm btn-outline">Todo</button>
+          <button id="deselect-all-btn" class="btn btn-sm btn-ghost">Ninguno</button>
+          <button id="collapse-all-btn" class="btn btn-sm btn-ghost" title="Cerrar todos los sets y bloques">Cerrar</button>
+        </div>
+      </div>
+
+      <div class="sidebar-search">
+        <input type="search" id="case-search" class="search-input" placeholder="Buscar caso…" autocomplete="off" />
+      </div>
+
+      <!-- Accordion rendered by JS -->
+      <div id="accordion" class="accordion" role="list"></div>
+
+      <div class="sidebar-footer">
+        <p class="sidebar-hint">Abre un set (H, U…) y un bloque (Set 1, Set 2…) para ver los casos. Usa «Cerrar» para plegar todo.</p>
+      </div>
+    </aside>
+
+    <!-- ═══════════════════════════════════════ MAIN CONTENT ══ -->
+    <main id="main-content" class="main-content" aria-label="Área de práctica">
+
+      <!-- Case info bar -->
+      <div id="case-info-bar" class="case-info-bar">
+        <span id="info-set" class="info-badge info-set">—</span>
+        <span id="info-case" class="info-case">Selecciona casos para empezar</span>
+        <span id="info-alg-count" class="info-alg-count"></span>
+      </div>
+
+      <!-- Scramble display -->
+      <section id="scramble-section" class="scramble-section" aria-label="Scramble actual">
+        <p class="scramble-label">SCRAMBLE</p>
+        <div id="scramble-moves" class="scramble-moves" aria-live="polite">
+          <span class="scramble-placeholder">Cargando algoritmos…</span>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────── TIMER AREA ── -->
+      <section
+        id="timer-area"
+        class="timer-area"
+        tabindex="0"
+        role="button"
+        aria-label="Cronómetro — pulsa espacio o toca para usar"
+        aria-live="polite"
+      >
+        <div id="timer-display" class="timer-display" data-phase="idle">
+          <span id="timer-value">0.000</span>
+        </div>
+        <p id="timer-hint" class="timer-hint">
+          Mantén <kbd>ESPACIO</kbd> o <kbd>toca</kbd> la pantalla para preparar
+        </p>
+      </section>
+
+      <!-- ─────────────────── RESULT (shown after solve) ── -->
+      <section id="result-section" class="result-section hidden" aria-label="Resultado de la resolución">
+        <div class="result-inner">
+
+          <div class="result-time-row">
+            <span class="result-label">Tiempo:</span>
+            <span id="result-time" class="result-time-val">—</span>
+            <span id="result-pb-tag" class="pb-tag hidden">🏆 PB!</span>
+          </div>
+
+          <div class="result-case-row">
+            <div class="result-image-wrap">
+              <img
+                id="case-img"
+                class="case-img"
+                alt="Diagrama del caso ZBLL"
+                loading="lazy"
+              />
+              <div id="case-img-fallback" class="case-img-fallback hidden">
+                <span>Sin imagen offline</span>
+              </div>
+            </div>
+
+            <div class="result-alg-wrap">
+              <p class="result-alg-label">Algoritmo:</p>
+              <code id="result-alg-text" class="result-alg-code"></code>
+              <p class="result-alg-case">
+                <span id="result-set-badge" class="info-badge"></span>
+                <span id="result-case-name"></span>
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ STATS PANEL ══ -->
+  <section id="stats-panel" class="stats-panel" aria-label="Estadísticas de práctica">
+    <div class="stats-header">
+      <h2 class="stats-title">
+        <span class="stats-icon" aria-hidden="true">📊</span>
+        Estadísticas
+      </h2>
+      <div class="stats-actions">
+        <button id="export-btn" class="btn btn-outline btn-sm" aria-label="Exportar estadísticas en JSON">
+          ⬆ Exportar
+        </button>
+        <label class="btn btn-outline btn-sm" for="import-file" aria-label="Importar estadísticas desde JSON">
+          ⬇ Importar
+          <input type="file" id="import-file" accept=".json" aria-hidden="true" />
+        </label>
+        <button id="clear-stats-btn" class="btn btn-danger btn-sm" aria-label="Borrar todos los tiempos">
+          🗑 Limpiar
+        </button>
+      </div>
+    </div>
+
+    <div class="stats-summary" id="stats-summary" aria-live="polite">
+      <!-- JS renders summary cards here -->
+    </div>
+
+    <div class="stats-table-wrap" role="region" aria-label="Tabla de tiempos" tabindex="0">
+      <table id="stats-table" class="stats-table" aria-sort="none">
+        <thead>
+          <tr>
+            <th class="sortable" data-col="set" tabindex="0" role="columnheader" aria-sort="ascending">Set <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="case" tabindex="0" role="columnheader">Caso <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="count" tabindex="0" role="columnheader">Count <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="pb" tabindex="0" role="columnheader">PB <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="mean" tabindex="0" role="columnheader">Media <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="ao5" tabindex="0" role="columnheader">Ao5 <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="ao12" tabindex="0" role="columnheader">Ao12 <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="last" tabindex="0" role="columnheader">Último <span class="sort-arrow">↕</span></th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="stats-tbody">
+          <!-- JS renders rows -->
+        </tbody>
+      </table>
+      <p id="stats-empty" class="stats-empty" role="status">
+        Aún no hay tiempos registrados.<br />¡Empieza a practicar!
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ TOAST ══ -->
+  <div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="true"></div>
+
+  <!-- ══════════════════════════════════════════ CONFIRM MODAL ══ -->
+  <div id="confirm-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-box">
+      <h3 id="modal-title" class="modal-title">¿Confirmar acción?</h3>
+      <p id="modal-body" class="modal-body"></p>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn btn-ghost">Cancelar</button>
+        <button id="modal-confirm" class="btn btn-danger">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
