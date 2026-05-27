@@ -728,19 +728,8 @@ function stopTimer() {
     renderStats();
   }
 
-  // Pick and show next scramble immediately, keep scramble in view
+  // Pick and show next scramble immediately
   displayScramble(pickRandomEntry());
-  scrollToPracticeTop('auto');
-}
-
-/** Keep scramble visible after result expands the page (especially on mobile). */
-function scrollToPracticeTop(behavior = 'auto') {
-  const target = DOM.practiceTop || document.getElementById('scramble-section');
-  if (!target) return;
-
-  const headerH = document.getElementById('app-header')?.offsetHeight ?? 58;
-  const top = target.getBoundingClientRect().top + window.scrollY - headerH - 8;
-  window.scrollTo({ top: Math.max(0, top), behavior });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -769,7 +758,6 @@ function showResult(entry, timeMs, isPB) {
   DOM.caseImg.onload  = () => {
     DOM.caseImg.classList.remove('hidden');
     DOM.caseImgFallback.classList.add('hidden');
-    scrollToPracticeTop('auto');
   };
   DOM.caseImg.onerror = () => {
     DOM.caseImg.classList.add('hidden');
@@ -777,9 +765,8 @@ function showResult(entry, timeMs, isPB) {
   };
   DOM.caseImg.src     = url;
 
-  // Show section with animation (do not scroll down to result)
+  // Show section with animation (do not auto-scroll on mobile)
   DOM.resultSection.classList.remove('hidden');
-  requestAnimationFrame(() => scrollToPracticeTop('auto'));
 }
 
 function hideResult() {
