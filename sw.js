@@ -3,8 +3,8 @@
    Service Worker · Cache-First strategy
    ══════════════════════════════════════════════════════════════ */
 
-const APP_CACHE_NAME = 'zbll-trainer-v11';
-const THUMBS_CACHE_NAME = 'zbll-thumbs-v1';
+const APP_CACHE_NAME = 'zbll-trainer-v12';
+const THUMBS_CACHE_NAME = 'zbll-thumbs-v2';
 
 // Files to pre-cache on install (app shell + data)
 const PRECACHE_URLS = [
@@ -60,29 +60,33 @@ self.addEventListener('fetch', event => {
                   url.hostname === 'fonts.gstatic.com';
   const isVisualCube = url.hostname === 'visualcube.api.cubing.net';
 
-  // For visualcube thumbnails: Cache-First with network fallback
+  // VisualCube: cachear cada diagrama la primera vez que carga (misma URL = mismo caso/tamaño)
   if (isVisualCube) {
     event.respondWith(
-      caches.open(THUMBS_CACHE_NAME).then(cache =>
-        cache.match(event.request).then(cached => {
-          if (cached) return cached;
-
-          return fetch(event.request)
+      caches.open(THUMBS_CACHE_NAME).then(async cache => {
+        const cached = await cache.match(event.request);
+        if (cached) {
+          // Actualizar en segundo plano si hay red (stale-while-revalidate)
+          fetch(event.request)
             .then(response => {
-              if (response && response.status === 200) {
+              if (isCacheableVisualCubeResponse(response)) {
                 cache.put(event.request, response.clone());
               }
-              return response;
             })
-            .catch(() => {
-              // Return a transparent 1×1 PNG if offline and uncached
-              return new Response(
-                new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,2,0,0,0,144,119,83,222,0,0,0,12,73,68,65,84,8,215,99,248,207,192,0,0,0,2,0,1,226,33,188,51,0,0,0,0,73,69,78,68,174,66,96,130]),
-                { headers: { 'Content-Type': 'image/png' } }
-              );
-            });
-        })
-      )
+            .catch(() => {});
+          return cached;
+        }
+
+        try {
+          const response = await fetch(event.request);
+          if (isCacheableVisualCubeResponse(response)) {
+            await cache.put(event.request, response.clone());
+          }
+          return response;
+        } catch {
+          return caches.match('./icon-512.png');
+        }
+      })
     );
     return;
   }
@@ -118,6 +122,12 @@ self.addEventListener('fetch', event => {
   // Everything else: network only (pass through)
   // e.g. external APIs
 });
+
+function isCacheableVisualCubeResponse(response) {
+  if (!response || !response.ok || response.status !== 200) return false;
+  const type = response.headers.get('content-type') || '';
+  return type.includes('image');
+}
 
 // ── Message handling (e.g. force update) ─────────────────────
 self.addEventListener('message', event => {

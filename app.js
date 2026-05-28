@@ -35,6 +35,11 @@ const S = {
     times: [],
   },
   forcedNextKey: null,
+  study:             {},        // { "set||case": { studyAlg, notes, updatedAt } }
+  studyCurrentKey:   null,
+  studyEditingAlg:   false,
+  studyEditingNotes: false,
+  appView:           'practice', // 'practice' | 'study' | 'stats'
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -54,6 +59,7 @@ const DOM = {
   selectAllBtn:    $id('select-all-btn'),
   deselectAllBtn:  $id('deselect-all-btn'),
   collapseAllBtn:  $id('collapse-all-btn'),
+  practiceCollapseAllBtn: $id('practice-collapse-all-btn'),
   caseSearch:      $id('case-search'),
   filterSlowBtn:   $id('filter-slow-btn'),
   filterLowBtn:    $id('filter-low-btn'),
@@ -65,6 +71,7 @@ const DOM = {
   // Scramble
   practiceTop:     $id('practice-top'),
   scrambleMoves:   $id('scramble-moves'),
+  nextScrambleBtn: $id('next-scramble-btn'),
   // Timer
   timerArea:       $id('timer-area'),
   timerDisplay:    $id('timer-display'),
@@ -74,6 +81,7 @@ const DOM = {
   resultSection:   $id('result-section'),
   resultTime:      $id('result-time'),
   repeatWeakBtn:   $id('repeat-weak-btn'),
+  openStudyBtn:    $id('open-study-btn'),
   caseImg:         $id('case-img'),
   caseImgFallback: $id('case-img-fallback'),
   resultAlgText:   $id('result-alg-text'),
@@ -89,6 +97,31 @@ const DOM = {
   exportBtn:       $id('export-btn'),
   importFile:      $id('import-file'),
   clearBtn:        $id('clear-stats-btn'),
+  // Nav & Study
+  navBtns:         document.querySelectorAll('.app-nav-btn'),
+  sidebarTitle:    $id('sidebar-title'),
+  studyView:       $id('study-view'),
+  studyEmpty:      $id('study-empty'),
+  studyDetail:     $id('study-detail'),
+  studySetBadge:   $id('study-set-badge'),
+  studyCaseName:   $id('study-case-name'),
+  studyPrevBtn:    $id('study-prev-btn'),
+  studyNextBtn:    $id('study-next-btn'),
+  studyCaseImg:    $id('study-case-img'),
+  studyImgFallback:$id('study-img-fallback'),
+  studyOfficialAlgs: $id('study-official-algs'),
+  studyAlgInput:     $id('study-alg-input'),
+  studyMyAlgView:    $id('study-my-alg-view'),
+  studyMyAlgDisplay: $id('study-my-alg-display'),
+  studyMyAlgEmpty:   $id('study-my-alg-empty'),
+  studyAlgEditBtn:   $id('study-alg-edit-btn'),
+  studyNotesBelow:   $id('study-notes-below'),
+  studyNotesDisplay: $id('study-notes-display'),
+  studyNotesEditBtn: $id('study-notes-edit-btn'),
+  studyNotesBlock:   $id('study-notes-block'),
+  studyNotesInput:   $id('study-notes-input'),
+  studySaveHint:   $id('study-save-hint'),
+  studyPracticeBtn:$id('study-practice-btn'),
   // Toast & Modal
   toastContainer:  $id('toast-container'),
   confirmModal:    $id('confirm-modal'),
@@ -106,8 +139,10 @@ const LS = {
   TIMES:     'zbll_times',
   OPEN_SETS:    'zbll_open_sets',
   OPEN_SUBSETS: 'zbll_open_subsets',
+  STUDY:        'zbll_study',
 };
 const MAX_TIMES_PER_CASE = 50;
+const STUDY_OFFICIAL_ALG_PREVIEW = 5;
 
 // ══════════════════════════════════════════════════════════════
 // UTILS
@@ -144,6 +179,132 @@ function buildVisualCubeUrl(algorithm, size = 200) {
   // view=plan → top-down view
   // sch=yrgwob → U=yellow R=red F=green D=white L=orange B=blue
   return `https://visualcube.api.cubing.net/visualcube.php?fmt=png&size=${size}&stage=ll&view=plan&sch=yrgwob&alg=${enc}`;
+}
+
+/** Load VisualCube diagram into an img (eager; works when panel was hidden) */
+function loadCaseDiagram(imgEl, fallbackEl, algorithm, size = 200) {
+  if (!imgEl) return;
+  if (!algorithm?.trim()) {
+    imgEl.classList.add('hidden');
+    imgEl.removeAttribute('src');
+    fallbackEl?.classList.remove('hidden');
+    return;
+  }
+
+  const url = buildVisualCubeUrl(algorithm, size);
+  imgEl.loading = 'eager';
+  imgEl.decoding = 'async';
+  imgEl.referrerPolicy = 'no-referrer';
+
+  fallbackEl?.classList.add('hidden');
+  imgEl.classList.remove('hidden');
+
+  imgEl.onload = () => {
+    imgEl.classList.remove('hidden');
+    fallbackEl?.classList.add('hidden');
+  };
+  imgEl.onerror = () => {
+    imgEl.classList.add('hidden');
+    imgEl.removeAttribute('src');
+    fallbackEl?.classList.remove('hidden');
+  };
+
+  if (imgEl.src === url) imgEl.src = '';
+  imgEl.src = url;
+}
+
+function getUniqueAlgorithmEntries(entries) {
+  const seen = new Set();
+  const out = [];
+  for (const entry of entries) {
+    const alg = entry.algorithm?.trim();
+    if (!alg || seen.has(alg)) continue;
+    seen.add(alg);
+    out.push(entry);
+  }
+  return out;
+}
+
+function renderStudyOfficialAlgs(entries) {
+  if (!DOM.studyOfficialAlgs) return;
+
+  const unique = getUniqueAlgorithmEntries(entries);
+  const visible = unique.slice(0, STUDY_OFFICIAL_ALG_PREVIEW);
+  const hidden  = unique.slice(STUDY_OFFICIAL_ALG_PREVIEW);
+
+  const itemHtml = entry => `
+    <div class="study-official-item">
+      <span class="study-official-text">${esc(entry.algorithm)}</span>
+      <button type="button" class="btn-copy" data-text="${esc(entry.algorithm)}">Copiar</button>
+    </div>`;
+
+  let html = visible.map(itemHtml).join('');
+
+  if (hidden.length) {
+    html += `
+      <button type="button" class="btn btn-ghost btn-sm study-algs-toggle" aria-expanded="false">
+        Ver ${hidden.length} algoritmo${hidden.length !== 1 ? 's' : ''} más
+      </button>
+      <div class="study-algs-more hidden">
+        ${hidden.map(itemHtml).join('')}
+      </div>`;
+  }
+
+  DOM.studyOfficialAlgs.innerHTML = html || '<p class="study-no-algs">Sin algoritmos en la base de datos.</p>';
+
+  DOM.studyOfficialAlgs.querySelectorAll('.btn-copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.text).then(
+        () => showToast('Algoritmo copiado', 'success'),
+        () => showToast('Error al copiar', 'error')
+      );
+    });
+  });
+
+  const toggle = DOM.studyOfficialAlgs.querySelector('.study-algs-toggle');
+  const more   = DOM.studyOfficialAlgs.querySelector('.study-algs-more');
+  if (toggle && more) {
+    toggle.addEventListener('click', () => {
+      const collapsed = more.classList.toggle('hidden');
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+      toggle.textContent = collapsed
+        ? `Ver ${hidden.length} algoritmo${hidden.length !== 1 ? 's' : ''} más`
+        : 'Ocultar algoritmos extra';
+    });
+  }
+}
+
+function refreshStudyPersonalUI() {
+  const alg   = DOM.studyAlgInput?.value?.trim() ?? '';
+  const notes = DOM.studyNotesInput?.value?.trim() ?? '';
+
+  if (S.studyEditingAlg) {
+    DOM.studyAlgInput?.classList.remove('hidden');
+    DOM.studyAlgEditBtn?.classList.add('hidden');
+    DOM.studyMyAlgView?.classList.add('hidden');
+  } else {
+    DOM.studyAlgInput?.classList.add('hidden');
+    DOM.studyAlgEditBtn?.classList.remove('hidden');
+    DOM.studyMyAlgView?.classList.remove('hidden');
+
+    if (alg) {
+      DOM.studyMyAlgDisplay?.classList.remove('hidden');
+      DOM.studyMyAlgEmpty?.classList.add('hidden');
+      if (DOM.studyMyAlgDisplay) DOM.studyMyAlgDisplay.textContent = alg;
+    } else {
+      DOM.studyMyAlgDisplay?.classList.add('hidden');
+      DOM.studyMyAlgEmpty?.classList.remove('hidden');
+    }
+  }
+
+  if (notes && !S.studyEditingNotes) {
+    DOM.studyNotesBelow?.classList.remove('hidden');
+    DOM.studyNotesBlock?.classList.add('hidden');
+    if (DOM.studyNotesDisplay) DOM.studyNotesDisplay.textContent = notes;
+  } else {
+    DOM.studyNotesBelow?.classList.add('hidden');
+    DOM.studyNotesBlock?.classList.remove('hidden');
+  }
 }
 
 /** Escape HTML for safe innerHTML insertion */
@@ -391,17 +552,54 @@ function chunkCaseNames(names, size = ALGS_PER_ZBLL_SUBSET) {
   return chunks;
 }
 
+const thumbLoadQueue = { pending: [], active: 0, maxConcurrent: 4 };
+
+function enqueueThumbLoad(img) {
+  if (!img?.dataset?.src || img.dataset.loaded) return;
+  if (!thumbLoadQueue.pending.includes(img)) thumbLoadQueue.pending.push(img);
+  drainThumbLoadQueue();
+}
+
+function drainThumbLoadQueue() {
+  while (thumbLoadQueue.active < thumbLoadQueue.maxConcurrent && thumbLoadQueue.pending.length) {
+    const img = thumbLoadQueue.pending.shift();
+    if (!img.isConnected || !img.dataset.src) continue;
+    thumbLoadQueue.active++;
+    const done = () => {
+      thumbLoadQueue.active--;
+      drainThumbLoadQueue();
+    };
+    img.onload = done;
+    img.onerror = () => { img.remove(); done(); };
+    img.src = img.dataset.src;
+    img.dataset.loaded = '1';
+  }
+}
+
+function loadThumbsInContainer(container) {
+  if (!container) return;
+  container.querySelectorAll('img.acc-case-thumb[data-src]:not([data-loaded])')
+    .forEach(enqueueThumbLoad);
+}
+
 function renderCaseItemHtml(setName, cn, cases) {
   const key  = makeKey(setName, cn);
   const sel  = S.selection.has(key);
+  const studyMode = S.appView === 'study';
+  const studyActive = studyMode && S.studyCurrentKey === key;
   const cid  = `case-chk-${key.replace(/[^a-z0-9]/gi, '-')}`;
   const alg  = cases[cn][0]?.algorithm;
   const difficulty = classifyCaseDifficulty(key);
-  const thumb = alg
-    ? `<img class="acc-case-thumb" src="${esc(buildVisualCubeUrl(alg, 48))}" alt="" loading="lazy" decoding="async" onerror="this.remove()" />`
+  const thumbUrl = alg ? buildVisualCubeUrl(alg, 48) : '';
+  const thumb = thumbUrl
+    ? `<img class="acc-case-thumb" data-src="${esc(thumbUrl)}" alt="" decoding="async" />`
     : '';
-  return `
-    <label class="acc-case-item${sel ? ' selected' : ''}" data-key="${esc(key)}" for="${cid}">
+  const rowTag = studyMode ? 'div' : 'label';
+  const rowAttrs = studyMode
+    ? `role="button" tabindex="0" aria-label="Abrir ${esc(cn)} para aprender"`
+    : `for="${cid}"`;
+  const rowClass = `acc-case-item${!studyMode && sel ? ' selected' : ''}${studyActive ? ' study-active' : ''}`;
+  const checkboxHtml = studyMode ? '' : `
       <input
         type="checkbox"
         id="${cid}"
@@ -409,15 +607,27 @@ function renderCaseItemHtml(setName, cn, cases) {
         data-key="${esc(key)}"
         ${sel ? 'checked' : ''}
         aria-label="${esc(cn)}"
-      />
+      />`;
+  return `
+    <${rowTag} class="${rowClass}" data-key="${esc(key)}" ${rowAttrs}>${checkboxHtml}
       <span class="acc-case-name">${esc(cn)}</span>
       <span class="acc-case-diff acc-case-diff-${difficulty.cls}">${difficulty.label}</span>
       ${thumb}
-    </label>`;
+    </${rowTag}>`;
 }
 
 /** Case list HTML: flat for H; else Set 1 / Set 2 … (12 cases each, collapsible) */
+function loadThumbsForSet(setEl, setName) {
+  if (!setEl) return;
+  if (SETS_WITHOUT_SUBSETS.has(setName)) {
+    loadThumbsInContainer(setEl.querySelector('.acc-cases'));
+    return;
+  }
+  setEl.querySelectorAll('.acc-subset.open .acc-subset-cases').forEach(loadThumbsInContainer);
+}
+
 function buildAccCasesHtml(setName, allNames, filtered, cases, searchActive = false) {
+  const studyMode = S.appView === 'study';
   if (SETS_WITHOUT_SUBSETS.has(setName)) {
     return filtered.map(cn => renderCaseItemHtml(setName, cn, cases)).join('');
   }
@@ -433,10 +643,7 @@ function buildAccCasesHtml(setName, allNames, filtered, cases, searchActive = fa
       const selInChunk = visible.filter(cn => S.selection.has(makeKey(setName, cn))).length;
       const allChunkSel = selInChunk === visible.length;
       const subsetId = `subset-chk-${setName}-${subsetNum}`;
-      return `
-        <div class="acc-subset${subsetOpen ? ' open' : ''}" data-subset="${subsetNum}">
-          <div class="acc-subset-header" role="button" tabindex="0" aria-expanded="${subsetOpen}">
-            <span class="acc-toggle-icon" aria-hidden="true">▶</span>
+      const subsetCheckHtml = studyMode ? '' : `
             <input
               type="checkbox"
               class="acc-subset-check"
@@ -445,9 +652,14 @@ function buildAccCasesHtml(setName, allNames, filtered, cases, searchActive = fa
               data-cases="${esc(visible.join(','))}"
               aria-label="Seleccionar Set ${subsetNum} del set ${setName}"
               ${allChunkSel ? 'checked' : ''}
-            />
+            />`;
+      const subsetBadge = studyMode ? String(visible.length) : `${selInChunk}/${visible.length}`;
+      return `
+        <div class="acc-subset${subsetOpen ? ' open' : ''}" data-subset="${subsetNum}">
+          <div class="acc-subset-header" role="button" tabindex="0" aria-expanded="${subsetOpen}">
+            <span class="acc-toggle-icon" aria-hidden="true">▶</span>${subsetCheckHtml}
             <span class="acc-subset-label">Set ${subsetNum}</span>
-            <span class="acc-subset-badge">${selInChunk}/${visible.length}</span>
+            <span class="acc-subset-badge">${subsetBadge}</span>
           </div>
           <div class="acc-subset-cases">
             ${visible.map(cn => renderCaseItemHtml(setName, cn, cases)).join('')}
@@ -489,14 +701,19 @@ function toggleSubset(setName, subsetNum, subsetEl) {
   const key = makeSubsetKey(setName, subsetNum);
   subsetEl.classList.toggle('open', !wasOpen);
   subsetEl.querySelector('.acc-subset-header')?.setAttribute('aria-expanded', String(!wasOpen));
-  if (!wasOpen) S.openSubsets.add(key);
-  else S.openSubsets.delete(key);
+  if (!wasOpen) {
+    S.openSubsets.add(key);
+    loadThumbsInContainer(subsetEl.querySelector('.acc-subset-cases'));
+  } else {
+    S.openSubsets.delete(key);
+  }
   saveOpenSubsets();
 }
 
 function renderAccordion(filter = '') {
   const fl           = filter.toLowerCase().trim();
   const searchActive = fl !== '';
+  const studyMode    = S.appView === 'study';
   const sets         = Object.keys(S.grouped).sort();
   DOM.accordion.innerHTML = '';
 
@@ -518,19 +735,25 @@ function renderAccordion(filter = '') {
     setEl.className = `acc-set${isOpen ? ' open' : ''}`;
     setEl.dataset.set = setName;
 
-    setEl.innerHTML = `
-      <div class="acc-set-header" role="button" tabindex="0" aria-expanded="${isOpen}">
-        <span class="acc-toggle-icon" aria-hidden="true">▶</span>
+    const setBadgeText = studyMode ? String(filtered.length) : `${selCount}/${filtered.length}`;
+    const setCheckHtml = studyMode ? '' : `
         <input
           type="checkbox"
           class="acc-set-check"
           id="set-chk-${setName}"
           aria-label="Seleccionar todos los casos del set ${setName}"
           ${allSel ? 'checked' : ''}
-        />
-        <label class="acc-set-name" for="set-chk-${setName}">${esc(setName)}</label>
-        <span class="acc-set-badge ${allSel ? 'all-selected' : ''}">
-          ${selCount}/${filtered.length}
+        />`;
+    const setNameHtml = studyMode
+      ? `<span class="acc-set-name">${esc(setName)}</span>`
+      : `<label class="acc-set-name" for="set-chk-${setName}">${esc(setName)}</label>`;
+
+    setEl.innerHTML = `
+      <div class="acc-set-header" role="button" tabindex="0" aria-expanded="${isOpen}">
+        <span class="acc-toggle-icon" aria-hidden="true">▶</span>${setCheckHtml}
+        ${setNameHtml}
+        <span class="acc-set-badge ${!studyMode && allSel ? 'all-selected' : ''}">
+          ${setBadgeText}
         </span>
       </div>
       <div class="acc-cases">
@@ -538,11 +761,9 @@ function renderAccordion(filter = '') {
       </div>
     `;
 
-    // Apply indeterminate state after render
     const setChk = setEl.querySelector('.acc-set-check');
-    setChk.indeterminate = someSel;
+    if (setChk) setChk.indeterminate = someSel;
 
-    // Header: toggle open
     const hdr = setEl.querySelector('.acc-set-header');
     hdr.addEventListener('click', e => {
       if (e.target.classList.contains('acc-set-check') ||
@@ -553,8 +774,7 @@ function renderAccordion(filter = '') {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSet(setName, setEl); }
     });
 
-    // Set checkbox: select/deselect all in set
-    setChk.addEventListener('change', e => {
+    setChk?.addEventListener('change', e => {
       e.stopPropagation();
       toggleAllInSet(setName, filtered, e.target.checked);
     });
@@ -577,30 +797,34 @@ function renderAccordion(filter = '') {
       });
     });
 
-    // Subset checkboxes (Set 1, Set 2 … — 12 cases each)
-    setEl.querySelectorAll('.acc-subset-check').forEach(chk => {
-      chk.addEventListener('change', e => {
-        e.stopPropagation();
-        const casesInSubset = chk.dataset.cases.split(',');
-        toggleAllInSet(chk.dataset.set, casesInSubset, e.target.checked);
+    if (!studyMode) {
+      setEl.querySelectorAll('.acc-subset-check').forEach(chk => {
+        chk.addEventListener('change', e => {
+          e.stopPropagation();
+          const casesInSubset = chk.dataset.cases.split(',');
+          toggleAllInSet(chk.dataset.set, casesInSubset, e.target.checked);
+        });
       });
-    });
+    }
 
-    // Case checkboxes
-    setEl.querySelectorAll('.case-chk').forEach(chk => {
-      chk.addEventListener('change', e => {
-        e.stopPropagation();
-        const key = chk.dataset.key;
-        if (e.target.checked) S.selection.add(key);
-        else S.selection.delete(key);
-        onSelectionChange();
-        refreshSetHeader(setEl, setName, filtered);
-        refreshAllSubsetHeaders(setEl, setName, allNames, filtered);
-        chk.closest('.acc-case-item')?.classList.toggle('selected', e.target.checked);
+    if (!studyMode) {
+      setEl.querySelectorAll('.case-chk').forEach(chk => {
+        chk.addEventListener('change', e => {
+          e.stopPropagation();
+          const key = chk.dataset.key;
+          if (e.target.checked) S.selection.add(key);
+          else S.selection.delete(key);
+          onSelectionChange();
+          refreshSetHeader(setEl, setName, filtered);
+          refreshAllSubsetHeaders(setEl, setName, allNames, filtered);
+          chk.closest('.acc-case-item')?.classList.toggle('selected', e.target.checked);
+        });
       });
-    });
+    }
 
     DOM.accordion.appendChild(setEl);
+
+    if (S.openSets.has(setName)) loadThumbsForSet(setEl, setName);
   }
 }
 
@@ -608,8 +832,15 @@ function toggleSet(setName, setEl) {
   const wasOpen = setEl.classList.contains('open');
   setEl.classList.toggle('open', !wasOpen);
   setEl.querySelector('.acc-set-header')?.setAttribute('aria-expanded', String(!wasOpen));
-  if (!wasOpen) S.openSets.add(setName);
-  else S.openSets.delete(setName);
+  if (!wasOpen) {
+    S.openSets.add(setName);
+    loadThumbsForSet(setEl, setName);
+  } else {
+    S.openSets.delete(setName);
+    thumbLoadQueue.pending = thumbLoadQueue.pending.filter(
+      img => !setEl.contains(img)
+    );
+  }
   saveOpenSets();
 }
 
@@ -738,16 +969,55 @@ function displayScramble(entry) {
     DOM.infoSet.textContent     = '—';
     DOM.infoCase.textContent    = 'Sin casos seleccionados';
     DOM.infoAlgCount.textContent = '';
+    DOM.nextScrambleBtn?.setAttribute('disabled', 'disabled');
     return;
   }
 
   DOM.scrambleMoves.innerHTML = formatMoves(entry.scramble);
+  DOM.nextScrambleBtn?.removeAttribute('disabled');
 
   // Info bar — hide case name (revealed after solve)
   DOM.infoSet.textContent = entry.set_name;
   DOM.infoCase.textContent = '';     // revealed after solve
   const totalAlgs = S.grouped[entry.set_name]?.[entry.case_name]?.length ?? 1;
   DOM.infoAlgCount.textContent = '';
+}
+
+function isPracticeShortcutBlocked() {
+  const tag = document.activeElement?.tagName ?? '';
+  return ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(tag);
+}
+
+function goNextScramble() {
+  if (S.selection.size === 0) {
+    showToast('Selecciona al menos un caso para practicar', 'error');
+    return;
+  }
+  if (S.timer.phase === 'RUNNING') {
+    showToast('Para el cronómetro antes de cambiar de scramble', 'info');
+    return;
+  }
+  if (S.timer.phase === 'READY') setTimerPhase('IDLE');
+  hideResult();
+  displayScramble(pickRandomEntry());
+}
+
+function repeatLastCase() {
+  const key = DOM.repeatWeakBtn?.dataset.key
+    || (S.lastEntry ? makeKey(S.lastEntry.set_name, S.lastEntry.case_name) : null);
+  if (!key) {
+    showToast('Resuelve un caso antes de repetir', 'info');
+    return;
+  }
+  if (S.timer.phase === 'RUNNING') {
+    showToast('Para el cronómetro antes de cambiar de scramble', 'info');
+    return;
+  }
+  if (S.timer.phase === 'READY') setTimerPhase('IDLE');
+  S.forcedNextKey = key;
+  hideResult();
+  displayScramble(pickRandomEntry());
+  showToast('Caso fijado para repetir', 'info');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -765,7 +1035,7 @@ function setTimerPhase(phase) {
 
   switch (phase) {
     case 'IDLE':
-      DOM.timerHint.innerHTML = 'Mantén <kbd>ESPACIO</kbd> o <kbd>toca</kbd> para preparar';
+      DOM.timerHint.innerHTML = 'Mantén <kbd>ESPACIO</kbd> o <kbd>toca</kbd> para preparar · <kbd>N</kbd> nuevo · <kbd>R</kbd> repetir';
       break;
     case 'READY':
       DOM.timerHint.textContent = '¡Suelta para empezar!';
@@ -781,9 +1051,7 @@ function setTimerPhase(phase) {
 function onPress(e) {
   if (e?.repeat) return; // ignore held key
 
-  // Don't trigger when focused on interactive elements
-  const tag = document.activeElement?.tagName ?? '';
-  if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(tag)) return;
+  if (isPracticeShortcutBlocked()) return;
 
   const phase = S.timer.phase;
 
@@ -874,27 +1142,21 @@ function showResult(entry, timeMs, isPB) {
 
   // Case name
   DOM.resultCaseName.textContent = entry.case_name;
-  const weakNow = classifyCaseDifficulty(makeKey(entry.set_name, entry.case_name)).cls === 'weak';
-  DOM.repeatWeakBtn?.classList.toggle('hidden', !weakNow);
-  if (DOM.repeatWeakBtn) DOM.repeatWeakBtn.dataset.key = makeKey(entry.set_name, entry.case_name);
+  const resultKey = makeKey(entry.set_name, entry.case_name);
+  if (DOM.repeatWeakBtn) {
+    DOM.repeatWeakBtn.dataset.key = resultKey;
+    DOM.repeatWeakBtn.classList.remove('hidden');
+  }
+  if (DOM.openStudyBtn) {
+    DOM.openStudyBtn.dataset.key = resultKey;
+    DOM.openStudyBtn.classList.remove('hidden');
+  }
 
   // Update info bar case name now that solve is done
   DOM.infoCase.textContent = entry.case_name;
 
   // Case image via visualcube (shown only after solve)
-  const url = buildVisualCubeUrl(entry.algorithm);
-  DOM.caseImg.classList.remove('hidden');
-  DOM.caseImgFallback.classList.add('hidden');
-
-  DOM.caseImg.onload  = () => {
-    DOM.caseImg.classList.remove('hidden');
-    DOM.caseImgFallback.classList.add('hidden');
-  };
-  DOM.caseImg.onerror = () => {
-    DOM.caseImg.classList.add('hidden');
-    DOM.caseImgFallback.classList.remove('hidden');
-  };
-  DOM.caseImg.src     = url;
+  loadCaseDiagram(DOM.caseImg, DOM.caseImgFallback, entry.algorithm, 200);
 
   // Show section with animation (do not auto-scroll on mobile)
   DOM.resultSection.classList.remove('hidden');
@@ -905,6 +1167,7 @@ function hideResult() {
   DOM.caseImg.src = '';
   DOM.infoCase.textContent = '';
   DOM.repeatWeakBtn?.classList.add('hidden');
+  DOM.openStudyBtn?.classList.add('hidden');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -920,6 +1183,155 @@ function loadTimes() {
 
 function saveTimes() {
   localStorage.setItem(LS.TIMES, JSON.stringify(S.times));
+}
+
+// ══════════════════════════════════════════════════════════════
+// STUDY — notas y algoritmo personal (localStorage)
+// ══════════════════════════════════════════════════════════════
+
+function loadStudy() {
+  try {
+    const raw = localStorage.getItem(LS.STUDY);
+    if (raw) S.study = JSON.parse(raw);
+  } catch (_) { S.study = {}; }
+}
+
+function saveStudy() {
+  localStorage.setItem(LS.STUDY, JSON.stringify(S.study));
+}
+
+function getStudyRecord(key) {
+  if (!S.study[key]) S.study[key] = { studyAlg: '', notes: '' };
+  return S.study[key];
+}
+
+let studySaveTimer;
+function scheduleStudySave() {
+  clearTimeout(studySaveTimer);
+  studySaveTimer = setTimeout(() => {
+    if (!S.studyCurrentKey) return;
+    const rec = getStudyRecord(S.studyCurrentKey);
+    rec.studyAlg = DOM.studyAlgInput?.value ?? '';
+    rec.notes    = DOM.studyNotesInput?.value ?? '';
+    rec.updatedAt = Date.now();
+    saveStudy();
+    if (DOM.studySaveHint) DOM.studySaveHint.textContent = 'Guardado ✓';
+    refreshStudyPersonalUI();
+  }, 400);
+}
+
+function getSortedCaseKeys() {
+  const keys = listAllCaseKeys();
+  keys.sort((a, b) => {
+    const pa = parseKey(a);
+    const pb = parseKey(b);
+    const bySet = pa.set.localeCompare(pb.set);
+    if (bySet !== 0) return bySet;
+    return compareCaseNames(pa.cas, pb.cas);
+  });
+  return keys;
+}
+
+function setAppView(view) {
+  S.appView = view;
+  document.body.classList.remove('view-practice', 'view-study', 'view-stats');
+  document.body.classList.add(`view-${view}`);
+
+  DOM.navBtns?.forEach(btn => {
+    const active = btn.dataset.view === view;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+
+  if (DOM.sidebarTitle) {
+    DOM.sidebarTitle.textContent = view === 'study'
+      ? 'Casos para aprender'
+      : 'Selección de Casos';
+  }
+
+  if (view === 'stats') {
+    document.body.classList.remove('sidebar-open');
+    DOM.sidebarToggle?.setAttribute('aria-expanded', 'false');
+    renderStats();
+  }
+
+  const sidebarHint = document.querySelector('.sidebar-hint');
+  if (sidebarHint) {
+    sidebarHint.textContent = view === 'study'
+      ? 'Abre un set y pulsa un caso para ver algoritmos, imagen y tus notas.'
+      : 'Abre un set (H, U…) y un bloque (Set 1, Set 2…) para ver los casos. Usa «Cerrar» para plegar todo.';
+  }
+
+  if (view === 'study' || view === 'practice') {
+    renderAccordion(DOM.caseSearch?.value ?? '');
+  }
+}
+
+function openStudyCase(key) {
+  if (!key || !S.grouped) return;
+  const { set, cas } = parseKey(key);
+  const entries = S.grouped[set]?.[cas];
+  if (!entries?.length) return;
+
+  S.studyCurrentKey = key;
+  S.studyEditingAlg = false;
+  S.studyEditingNotes = false;
+  const primaryAlg = entries[0].algorithm;
+
+  DOM.studyEmpty?.classList.add('hidden');
+  DOM.studyDetail?.classList.remove('hidden');
+
+  if (DOM.studySetBadge) DOM.studySetBadge.textContent = set;
+  if (DOM.studyCaseName) DOM.studyCaseName.textContent = cas;
+
+  loadCaseDiagram(DOM.studyCaseImg, DOM.studyImgFallback, primaryAlg, 200);
+  renderStudyOfficialAlgs(entries);
+
+  const rec = getStudyRecord(key);
+  if (DOM.studyAlgInput) DOM.studyAlgInput.value = rec.studyAlg ?? '';
+  if (DOM.studyNotesInput) DOM.studyNotesInput.value = rec.notes ?? '';
+  refreshStudyPersonalUI();
+  if (DOM.studySaveHint) DOM.studySaveHint.textContent = 'Los cambios se guardan automáticamente en este dispositivo.';
+
+  const keys = getSortedCaseKeys();
+  const idx = keys.indexOf(key);
+  if (DOM.studyPrevBtn) DOM.studyPrevBtn.disabled = idx <= 0;
+  if (DOM.studyNextBtn) DOM.studyNextBtn.disabled = idx < 0 || idx >= keys.length - 1;
+
+  renderAccordion(DOM.caseSearch?.value ?? '');
+
+  DOM.studyDetail?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  if (window.matchMedia('(max-width: 768px)').matches) {
+    document.body.classList.remove('sidebar-open');
+    DOM.sidebarToggle?.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function navigateStudy(delta) {
+  const keys = getSortedCaseKeys();
+  const idx = keys.indexOf(S.studyCurrentKey);
+  if (idx < 0) return;
+  const next = keys[idx + delta];
+  if (next) openStudyCase(next);
+}
+
+function openStudyFromKey(key) {
+  if (!key) return;
+  setAppView('study');
+  openStudyCase(key);
+}
+
+function practiceStudyCaseOnly() {
+  if (!S.studyCurrentKey) return;
+  S.selection = new Set([S.studyCurrentKey]);
+  saveSelection();
+  onSelectionChange();
+  setAppView('practice');
+  document.body.classList.remove('sidebar-open');
+  DOM.sidebarToggle?.setAttribute('aria-expanded', 'false');
+  renderAccordion(DOM.caseSearch?.value ?? '');
+  showToast('Practicando solo este caso', 'info');
 }
 
 /** Record a time, returns true if it's a new PB */
@@ -1217,11 +1629,18 @@ function renderSummaryCards(keys) {
 // ══════════════════════════════════════════════════════════════
 
 function exportStats() {
-  if (!Object.keys(S.times).length) {
-    showToast('No hay tiempos que exportar', 'info');
+  const hasTimes = Object.keys(S.times).length > 0;
+  const hasStudy = Object.keys(S.study).length > 0;
+  if (!hasTimes && !hasStudy) {
+    showToast('No hay datos que exportar', 'info');
     return;
   }
-  const payload = { version: 1, exported: new Date().toISOString(), times: S.times };
+  const payload = {
+    version: 2,
+    exported: new Date().toISOString(),
+    times: S.times,
+    study: S.study,
+  };
   const blob    = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url     = URL.createObjectURL(blob);
   const a       = Object.assign(document.createElement('a'), {
@@ -1257,10 +1676,21 @@ function importStats(file) {
           S.times[key].times.sort((a, b) => a.ts - b.ts);
         }
       }
+      if (data.study && typeof data.study === 'object') {
+        for (const [key, rec] of Object.entries(data.study)) {
+          if (!S.study[key]) S.study[key] = rec;
+          else {
+            S.study[key] = { ...S.study[key], ...rec };
+          }
+        }
+        saveStudy();
+        if (S.studyCurrentKey && S.appView === 'study') openStudyCase(S.studyCurrentKey);
+      }
+
       saveTimes();
       renderStats();
       renderAccordion(DOM.caseSearch.value);
-      showToast(`Importado: ${added} nuevos casos, ${merged} tiempos fusionados`, 'success');
+      showToast(`Importado: ${added} casos nuevos, ${merged} tiempos fusionados`, 'success');
     } catch (err) {
       showToast('Error al importar: archivo no válido', 'error');
     } finally {
@@ -1380,10 +1810,12 @@ function initEvents() {
     showToast('Selección limpiada', 'info');
   });
 
-  DOM.collapseAllBtn?.addEventListener('click', () => {
+  const onCollapseAll = () => {
     collapseAllAccordion();
     showToast('Listas cerradas', 'info');
-  });
+  };
+  DOM.collapseAllBtn?.addEventListener('click', onCollapseAll);
+  DOM.practiceCollapseAllBtn?.addEventListener('click', onCollapseAll);
 
   DOM.filterSlowBtn?.addEventListener('click', () =>
     selectByFilter(m => m.mean != null && m.mean > 2000, '> 2.0s')
@@ -1394,13 +1826,57 @@ function initEvents() {
   DOM.filterUnseenBtn?.addEventListener('click', () =>
     selectByFilter(m => m.count === 0, 'sin practicar')
   );
-  DOM.repeatWeakBtn?.addEventListener('click', () => {
-    const key = DOM.repeatWeakBtn.dataset.key;
-    if (!key) return;
-    S.forcedNextKey = key;
-    hideResult();
-    displayScramble(pickRandomEntry());
-    showToast('Caso fijado para repetir', 'info');
+  DOM.repeatWeakBtn?.addEventListener('click', repeatLastCase);
+  DOM.openStudyBtn?.addEventListener('click', () => openStudyFromKey(DOM.openStudyBtn.dataset.key));
+  DOM.nextScrambleBtn?.addEventListener('click', goNextScramble);
+
+  // ── App navigation ─────────────────────────────────────────
+  DOM.navBtns?.forEach(btn => {
+    btn.addEventListener('click', () => setAppView(btn.dataset.view));
+  });
+
+  // ── Study mode: click case in sidebar ───────────────────────
+  DOM.accordion.addEventListener('click', e => {
+    if (S.appView !== 'study') return;
+    const item = e.target.closest('.acc-case-item');
+    if (!item?.dataset.key) return;
+    openStudyCase(item.dataset.key);
+  });
+  DOM.accordion.addEventListener('keydown', e => {
+    if (S.appView !== 'study') return;
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const item = e.target.closest('.acc-case-item[role="button"]');
+    if (!item?.dataset.key) return;
+    e.preventDefault();
+    openStudyCase(item.dataset.key);
+  });
+
+  DOM.studyPrevBtn?.addEventListener('click', () => navigateStudy(-1));
+  DOM.studyNextBtn?.addEventListener('click', () => navigateStudy(1));
+  DOM.studyPracticeBtn?.addEventListener('click', practiceStudyCaseOnly);
+  DOM.studyAlgEditBtn?.addEventListener('click', () => {
+    S.studyEditingAlg = true;
+    refreshStudyPersonalUI();
+    DOM.studyAlgInput?.focus();
+  });
+  DOM.studyAlgInput?.addEventListener('input', scheduleStudySave);
+  DOM.studyAlgInput?.addEventListener('blur', () => {
+    if (!S.studyEditingAlg) return;
+    S.studyEditingAlg = false;
+    scheduleStudySave();
+    refreshStudyPersonalUI();
+  });
+  DOM.studyNotesEditBtn?.addEventListener('click', () => {
+    S.studyEditingNotes = true;
+    refreshStudyPersonalUI();
+    DOM.studyNotesInput?.focus();
+  });
+  DOM.studyNotesInput?.addEventListener('input', scheduleStudySave);
+  DOM.studyNotesInput?.addEventListener('blur', () => {
+    if (!S.studyEditingNotes) return;
+    S.studyEditingNotes = false;
+    scheduleStudySave();
+    refreshStudyPersonalUI();
   });
 
   // ── Case search ───────────────────────────────────────────
@@ -1408,6 +1884,21 @@ function initEvents() {
   DOM.caseSearch.addEventListener('input', () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => renderAccordion(DOM.caseSearch.value), 180);
+  });
+
+  // ── Practice shortcuts (desktop): N = nuevo, R = repetir ───
+  window.addEventListener('keydown', e => {
+    if (isPracticeShortcutBlocked()) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    const key = e.key.toLowerCase();
+    if (key === 'n') {
+      e.preventDefault();
+      goNextScramble();
+    } else if (key === 'r') {
+      e.preventDefault();
+      repeatLastCase();
+    }
   });
 
   // ── Timer — Keyboard (Space) ──────────────────────────────
@@ -1437,6 +1928,16 @@ function initEvents() {
   DOM.timerArea.addEventListener('touchcancel', () => {
     if (S.timer.phase === 'READY') setTimerPhase('IDLE');
   });
+
+  // While running on mobile, allow stopping from anywhere on screen.
+  // We intercept the touch to avoid triggering other controls by mistake.
+  document.addEventListener('touchstart', e => {
+    if (S.timer.phase !== 'RUNNING') return;
+    if (e.target.closest('#timer-area')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onPress(e);
+  }, { passive: false, capture: true });
 
   // ── Timer — Mouse click (desktop fallback) ─────────────────
   DOM.timerArea.addEventListener('mousedown', e => {
@@ -1488,6 +1989,9 @@ async function init() {
   loadOpenSets();
   loadOpenSubsets();
   loadTimes();
+  loadStudy();
+
+  document.body.classList.add('view-practice');
 
   // Boot PWA
   initPWA();

@@ -48,6 +48,15 @@
     </div>
   </header>
 
+  <div class="app-shell">
+  <nav class="app-nav" aria-label="Secciones de la aplicación">
+    <div class="app-nav-inner">
+      <button type="button" class="app-nav-btn active" data-view="practice" aria-current="page">Practicar</button>
+      <button type="button" class="app-nav-btn" data-view="study">Aprender</button>
+      <button type="button" class="app-nav-btn" data-view="stats">Estadísticas</button>
+    </div>
+  </nav>
+
   <!-- ═══════════════════════════════════════════ APP LAYOUT ══ -->
   <div class="app-layout">
 
@@ -57,7 +66,7 @@
     <!-- ════════════════════════════════════════════ SIDEBAR ══ -->
     <aside id="sidebar" class="sidebar" aria-label="Selector de casos ZBLL">
       <div class="sidebar-head">
-        <h2 class="sidebar-title">Selección de Casos</h2>
+        <h2 id="sidebar-title" class="sidebar-title">Selección de Casos</h2>
         <div class="sidebar-bulk-actions">
           <button id="select-all-btn" class="btn btn-sm btn-outline">Todo</button>
           <button id="deselect-all-btn" class="btn btn-sm btn-ghost">Ninguno</button>
@@ -84,8 +93,15 @@
     </aside>
 
     <!-- ═══════════════════════════════════════ MAIN CONTENT ══ -->
-    <main id="main-content" class="main-content" aria-label="Área de práctica">
+    <main id="main-content" class="main-content" aria-label="Área principal">
 
+      <div class="main-quick-bar">
+        <button id="practice-collapse-all-btn" class="btn btn-sm btn-ghost" type="button" title="Cerrar todos los sets y bloques del panel">
+          Cerrar todo
+        </button>
+      </div>
+
+      <div id="practice-view" class="practice-view">
       <div id="practice-top" class="practice-top">
         <!-- Case info bar -->
         <div id="case-info-bar" class="case-info-bar">
@@ -99,6 +115,11 @@
           <p class="scramble-label">SCRAMBLE</p>
           <div id="scramble-moves" class="scramble-moves" aria-live="polite">
             <span class="scramble-placeholder">Cargando algoritmos…</span>
+          </div>
+          <div class="scramble-actions">
+            <button id="next-scramble-btn" class="btn btn-outline btn-sm" type="button" aria-label="Mostrar siguiente scramble">
+              ↻ Siguiente scramble
+            </button>
           </div>
         </section>
       </div>
@@ -127,7 +148,8 @@
           <div class="result-time-row">
             <span class="result-label">Tiempo:</span>
             <span id="result-time" class="result-time-val">—</span>
-            <button id="repeat-weak-btn" class="btn btn-sm btn-outline hidden" title="Repetir este caso para consolidarlo">Repetir caso</button>
+            <button id="repeat-weak-btn" class="btn btn-sm btn-outline hidden" title="Mostrar el mismo caso en el siguiente scramble">Repetir caso</button>
+            <button id="open-study-btn" class="btn btn-sm btn-ghost hidden" type="button" title="Ver algoritmos y notas de este caso">📖 Aprender caso</button>
           </div>
 
           <div class="result-case-row">
@@ -154,9 +176,73 @@
 
         </div>
       </section>
+      </div><!-- /practice-view -->
+
+      <section id="study-view" class="study-view" aria-label="Modo aprendizaje">
+        <div class="study-empty" id="study-empty">
+          <p>Elige un caso en el panel izquierdo para ver su imagen, algoritmos y tus notas.</p>
+        </div>
+
+        <div id="study-detail" class="study-detail hidden">
+          <div class="study-detail-head">
+            <div class="study-case-title">
+              <span id="study-set-badge" class="info-badge info-set">—</span>
+              <h2 id="study-case-name" class="study-case-name">—</h2>
+            </div>
+            <div class="study-nav">
+              <button type="button" id="study-prev-btn" class="btn btn-outline btn-sm" aria-label="Caso anterior">← Anterior</button>
+              <button type="button" id="study-next-btn" class="btn btn-outline btn-sm" aria-label="Caso siguiente">Siguiente →</button>
+            </div>
+          </div>
+
+          <div class="study-layout">
+            <div class="study-visual">
+              <div class="study-img-wrap">
+                <img id="study-case-img" class="study-case-img case-img" alt="Diagrama del caso ZBLL" loading="eager" decoding="async" referrerpolicy="no-referrer" />
+                <div id="study-img-fallback" class="case-img-fallback hidden"><span>Sin imagen</span></div>
+              </div>
+              <button type="button" id="study-practice-btn" class="btn btn-accent">Practicar solo este caso</button>
+            </div>
+
+            <div class="study-fields">
+              <div class="study-block study-block-primary">
+                <h3 class="study-block-title">Mi algoritmo</h3>
+                <div class="study-my-alg-row">
+                  <div id="study-my-alg-view" class="study-my-alg-view">
+                    <p id="study-my-alg-empty" class="study-my-alg-empty">Sin versión personalizada</p>
+                    <p id="study-my-alg-display" class="study-my-alg-display hidden"></p>
+                  </div>
+                  <button type="button" id="study-alg-edit-btn" class="study-edit-btn" aria-label="Editar mi algoritmo" title="Editar algoritmo">
+                    <span class="study-edit-icon" aria-hidden="true">✎</span>
+                  </button>
+                </div>
+                <textarea id="study-alg-input" class="study-textarea mono hidden" rows="4" placeholder="Ej: (R U R') (U') (R U2 R')"></textarea>
+
+                <div id="study-notes-below" class="study-notes-below hidden">
+                  <p id="study-notes-display" class="study-notes-display"></p>
+                  <button type="button" id="study-notes-edit-btn" class="btn btn-ghost btn-sm study-notes-edit-link">Editar observación</button>
+                </div>
+              </div>
+
+              <div class="study-block">
+                <h3 class="study-block-title">Algoritmos oficiales</h3>
+                <div id="study-official-algs" class="study-official-algs"></div>
+              </div>
+
+              <div class="study-block" id="study-notes-block">
+                <label class="study-block-title" for="study-notes-input">Observaciones</label>
+                <textarea id="study-notes-input" class="study-textarea" rows="4" placeholder="Patrones, comparaciones con otros casos, recordatorios…"></textarea>
+              </div>
+
+              <p id="study-save-hint" class="study-save-hint" aria-live="polite">Los cambios se guardan automáticamente en este dispositivo.</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
     </main>
   </div>
+  </div><!-- /app-shell -->
 
   <!-- ═══════════════════════════════════════════ STATS PANEL ══ -->
   <section id="stats-panel" class="stats-panel" aria-label="Estadísticas de práctica">
