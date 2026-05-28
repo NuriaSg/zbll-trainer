@@ -27,6 +27,14 @@ const S = {
   sortDir:      1,
   installPrompt: null,
   expandedKey:  null,      // key of the currently expanded row in the stats table
+  session: {
+    active: false,
+    target: 20,
+    done: 0,
+    weakKeys: [],
+    times: [],
+  },
+  forcedNextKey: null,
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -47,6 +55,9 @@ const DOM = {
   deselectAllBtn:  $id('deselect-all-btn'),
   collapseAllBtn:  $id('collapse-all-btn'),
   caseSearch:      $id('case-search'),
+  filterSlowBtn:   $id('filter-slow-btn'),
+  filterLowBtn:    $id('filter-low-btn'),
+  filterUnseenBtn: $id('filter-unseen-btn'),
   // Info bar
   infoSet:         $id('info-set'),
   infoCase:        $id('info-case'),
@@ -62,7 +73,7 @@ const DOM = {
   // Result
   resultSection:   $id('result-section'),
   resultTime:      $id('result-time'),
-  resultPbTag:     $id('result-pb-tag'),
+  repeatWeakBtn:   $id('repeat-weak-btn'),
   caseImg:         $id('case-img'),
   caseImgFallback: $id('case-img-fallback'),
   resultAlgText:   $id('result-alg-text'),
@@ -72,6 +83,9 @@ const DOM = {
   statsTbody:      $id('stats-tbody'),
   statsEmpty:      $id('stats-empty'),
   statsSummary:    $id('stats-summary'),
+  statsSearch:     $id('stats-search'),
+  statsSetFilter:  $id('stats-set-filter'),
+  statsLevelFilter:$id('stats-level-filter'),
   exportBtn:       $id('export-btn'),
   importFile:      $id('import-file'),
   clearBtn:        $id('clear-stats-btn'),
@@ -93,6 +107,7 @@ const LS = {
   OPEN_SETS:    'zbll_open_sets',
   OPEN_SUBSETS: 'zbll_open_subsets',
 };
+const MAX_TIMES_PER_CASE = 50;
 
 // ══════════════════════════════════════════════════════════════
 // UTILS
@@ -292,6 +307,77 @@ function updateSelectionBadge() {
   DOM.selectedBadge.classList.toggle('active', n > 0);
 }
 
+function listAllCaseKeys() {
+  const out = [];
+  for (const [setName, cases] of Object.entries(S.grouped)) {
+    for (const cn of Object.keys(cases)) out.push(makeKey(setName, cn));
+  }
+  return out;
+}
+
+function getCaseMetricsByKey(key) {
+  const rec = S.times[key];
+  const count = rec?.times?.length ?? 0;
+  const mean = count ? rec.times.reduce((s, t) => s + t.time, 0) / count : null;
+  return { count, mean };
+}
+
+function scoreWeakness(key, meanMin, meanRange) {
+  const { count, mean } = getCaseMetricsByKey(key);
+  const meanNorm = mean == null ? 0.5 : Math.max(0, Math.min(1, (mean - meanMin) / meanRange));
+  const speedWeight = 1 + (2.2 * meanNorm);
+  const practiceWeight = 1 + Math.max(0, (10 - count)) / 10;
+  return speedWeight * practiceWeight;
+}
+
+function rankWeakCaseKeys(keys) {
+  const means = keys.map(k => getCaseMetricsByKey(k).mean).filter(v => v != null);
+  const meanMin = means.length ? Math.min(...means) : 0;
+  const meanMax = means.length ? Math.max(...means) : 0;
+  const meanRange = Math.max(1, meanMax - meanMin);
+
+  return [...keys].sort((a, b) =>
+    scoreWeakness(b, meanMin, meanRange) - scoreWeakness(a, meanMin, meanRange)
+  );
+}
+
+function classifyCaseDifficulty(key) {
+  const { count } = getCaseMetricsByKey(key);
+  if (count === 0) return { label: 'nuevo', cls: 'new' };
+
+  const times = S.times[key]?.times ?? [];
+  const last = times[times.length - 1]?.time ?? null;
+  const recent = times.slice(-3).map(t => t.time);
+  const recentMean = recent.length
+    ? recent.reduce((s, t) => s + t, 0) / recent.length
+    : null;
+  const recentSlowCount = recent.filter(t => t > 2500).length;
+
+  // For established data, only mark weak when recent trend is truly slow.
+  if (count >= 3 && recentSlowCount >= 2) {
+    return { label: 'flojo', cls: 'weak' };
+  }
+  // For first solves, mark weak only if the most recent solve is above threshold.
+  if (count < 3 && last != null && last > 2500) return { label: 'flojo', cls: 'weak' };
+  if (count < 3) return { label: 'dominado', cls: 'strong' };
+
+  if (recentMean != null && recentMean <= 1800 && count >= 3) {
+    return { label: 'dominado', cls: 'strong' };
+  }
+  return { label: 'flojo', cls: 'weak' };
+}
+
+function updateSessionStatus() {
+  if (!DOM.sessionStatus) return;
+  if (!S.session.active) {
+    DOM.sessionStatus.textContent = '';
+    DOM.sessionStatus.classList.add('hidden');
+    return;
+  }
+  DOM.sessionStatus.classList.remove('hidden');
+  DOM.sessionStatus.textContent = `Sesión ${S.session.done}/${S.session.target}`;
+}
+
 // ══════════════════════════════════════════════════════════════
 // ACCORDION SELECTOR UI
 // ══════════════════════════════════════════════════════════════
@@ -310,6 +396,7 @@ function renderCaseItemHtml(setName, cn, cases) {
   const sel  = S.selection.has(key);
   const cid  = `case-chk-${key.replace(/[^a-z0-9]/gi, '-')}`;
   const alg  = cases[cn][0]?.algorithm;
+  const difficulty = classifyCaseDifficulty(key);
   const thumb = alg
     ? `<img class="acc-case-thumb" src="${esc(buildVisualCubeUrl(alg, 48))}" alt="" loading="lazy" decoding="async" onerror="this.remove()" />`
     : '';
@@ -324,6 +411,7 @@ function renderCaseItemHtml(setName, cn, cases) {
         aria-label="${esc(cn)}"
       />
       <span class="acc-case-name">${esc(cn)}</span>
+      <span class="acc-case-diff acc-case-diff-${difficulty.cls}">${difficulty.label}</span>
       ${thumb}
     </label>`;
 }
@@ -555,9 +643,33 @@ function refreshSetHeader(setEl, setName, caseNames) {
  * - slower cases appear more often
  * - under-practiced cases appear more often
  */
+function pickPreferredEntry(entries) {
+  if (!entries?.length) return null;
+  const hasUncomfortableMoves = s => /(^|\s)[xyzmse](2|'|)(?=\s|$)/i.test(String(s || ''));
+
+  // Prefer a variant without rotations or middle-slice moves.
+  const comfy = entries.find(e => !hasUncomfortableMoves(e.scramble) && !hasUncomfortableMoves(e.algorithm));
+  if (comfy) return comfy;
+
+  // Fallback: first variant for stable, non-random behavior per case.
+  return entries[0];
+}
+
 function pickRandomEntry() {
+  if (S.forcedNextKey) {
+    const key = S.forcedNextKey;
+    S.forcedNextKey = null;
+    const { set, cas } = parseKey(key);
+    const entries = S.grouped[set]?.[cas];
+    return pickPreferredEntry(entries);
+  }
+
+  const activeKeys = S.session.active
+    ? S.session.weakKeys.filter(k => S.selection.has(k))
+    : [...S.selection];
+
   const casePool = [];
-  for (const key of S.selection) {
+  for (const key of activeKeys) {
     const { set, cas } = parseKey(key);
     const entries = S.grouped[set]?.[cas];
     if (entries?.length) casePool.push({ key, entries });
@@ -600,13 +712,13 @@ function pickRandomEntry() {
   for (const c of weighted) {
     r -= c.weight;
     if (r <= 0) {
-      return c.entries[Math.floor(Math.random() * c.entries.length)];
+      return pickPreferredEntry(c.entries);
     }
   }
 
   // Fallback: should not happen, but keep safe behavior.
   const last = weighted[weighted.length - 1];
-  return last.entries[Math.floor(Math.random() * last.entries.length)];
+  return pickPreferredEntry(last.entries);
 }
 
 /** Wrap each move in a <span> for hover styling */
@@ -725,7 +837,24 @@ function stopTimer() {
   if (entry) {
     const isPB = recordTime(entry, elapsedMs);
     showResult(entry, elapsedMs, isPB);
+
+    if (S.session.active) {
+      S.session.done += 1;
+      S.session.times.push(elapsedMs);
+      updateSessionStatus();
+      if (S.session.done >= S.session.target) {
+        const avg = S.session.times.reduce((s, t) => s + t, 0) / S.session.times.length;
+        const best = Math.min(...S.session.times);
+        showToast(`Sesión completa: media ${fmtTime(avg)}, mejor ${fmtTime(best)}`, 'success', 7000);
+        S.session.active = false;
+        S.session.done = 0;
+        S.session.times = [];
+        updateSessionStatus();
+      }
+    }
+
     renderStats();
+    renderAccordion(DOM.caseSearch.value);
   }
 
   // Pick and show next scramble immediately
@@ -739,13 +868,15 @@ function stopTimer() {
 function showResult(entry, timeMs, isPB) {
   // Time value
   DOM.resultTime.textContent = fmtTime(timeMs);
-  DOM.resultPbTag.classList.toggle('hidden', !isPB);
 
   // Algorithm
   DOM.resultAlgText.textContent = entry.algorithm;
 
   // Case name
   DOM.resultCaseName.textContent = entry.case_name;
+  const weakNow = classifyCaseDifficulty(makeKey(entry.set_name, entry.case_name)).cls === 'weak';
+  DOM.repeatWeakBtn?.classList.toggle('hidden', !weakNow);
+  if (DOM.repeatWeakBtn) DOM.repeatWeakBtn.dataset.key = makeKey(entry.set_name, entry.case_name);
 
   // Update info bar case name now that solve is done
   DOM.infoCase.textContent = entry.case_name;
@@ -773,6 +904,7 @@ function hideResult() {
   DOM.resultSection.classList.add('hidden');
   DOM.caseImg.src = '';
   DOM.infoCase.textContent = '';
+  DOM.repeatWeakBtn?.classList.add('hidden');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -802,6 +934,9 @@ function recordTime(entry, ms) {
     : Infinity;
 
   record.times.push({ id: entry.id, time: ms, ts: Date.now() });
+  if (record.times.length > MAX_TIMES_PER_CASE) {
+    record.times = record.times.slice(-MAX_TIMES_PER_CASE);
+  }
   saveTimes();
   return ms < prevPB;
 }
@@ -856,13 +991,33 @@ function renderStats() {
   const rows = keys.map(key => {
     const rec = S.times[key];
     const st  = computeStats(rec.times);
-    return { key, set: rec.set, case: rec.case, ...st };
+    const diff = classifyCaseDifficulty(key);
+    return { key, set: rec.set, case: rec.case, diffCls: diff.cls, ...st };
   }).filter(Boolean);
+
+  // Keep set filter options in sync with available rows
+  if (DOM.statsSetFilter) {
+    const prev = DOM.statsSetFilter.value || 'all';
+    const setVals = [...new Set(rows.map(r => r.set))].sort();
+    DOM.statsSetFilter.innerHTML = `<option value="all">Todos los sets</option>${setVals.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}`;
+    DOM.statsSetFilter.value = setVals.includes(prev) ? prev : 'all';
+  }
+
+  // Apply stats filters (search, set, level)
+  const q = DOM.statsSearch?.value?.trim().toLowerCase() ?? '';
+  const setFilter = DOM.statsSetFilter?.value ?? 'all';
+  const levelFilter = DOM.statsLevelFilter?.value ?? 'all';
+  const filteredRows = rows.filter(r => {
+    if (setFilter !== 'all' && r.set !== setFilter) return false;
+    if (levelFilter !== 'all' && r.diffCls !== levelFilter) return false;
+    if (q && !(r.set.toLowerCase().includes(q) || r.case.toLowerCase().includes(q))) return false;
+    return true;
+  });
 
   // Sort
   const col = S.sortCol;
   const dir = S.sortDir;
-  rows.sort((a, b) => {
+  filteredRows.sort((a, b) => {
     let av = a[col], bv = b[col];
     if (av == null) av = dir === 1 ?  Infinity : -Infinity;
     if (bv == null) bv = dir === 1 ?  Infinity : -Infinity;
@@ -878,14 +1033,13 @@ function renderStats() {
   const T    = v => (v != null ? esc(fmtTime(v)) : dash);
 
   const tableRows = [];
-  for (const row of rows) {
+  for (const row of filteredRows) {
     const isExpanded = S.expandedKey === row.key;
     tableRows.push(`
       <tr data-key="${esc(row.key)}" class="${isExpanded ? 'row-expanded-parent' : ''}">
         <td><span class="info-badge info-set">${esc(row.set)}</span></td>
         <td>${esc(row.case)}</td>
         <td class="mono-val">${row.count}</td>
-        <td class="pb-cell">${T(row.pb)}</td>
         <td class="mono-val">${T(row.mean)}</td>
         <td class="mono-val">${T(row.ao5)}</td>
         <td class="mono-val">${T(row.ao12)}</td>
@@ -914,7 +1068,7 @@ function renderStats() {
 
       tableRows.push(`
         <tr class="details-row" data-key="${esc(row.key)}">
-          <td colspan="9">
+          <td colspan="8">
             <div class="details-expanded-content">
               
               <div class="details-img-wrap">
@@ -992,6 +1146,7 @@ function renderStats() {
         }
         saveTimes();
         renderStats();
+        renderAccordion(DOM.caseSearch.value);
         showToast('Tiempo eliminado', 'success');
       }
     });
@@ -1010,6 +1165,7 @@ function renderStats() {
           if (S.expandedKey === key) S.expandedKey = null;
           saveTimes(); 
           renderStats(); 
+          renderAccordion(DOM.caseSearch.value);
           showToast('Tiempos eliminados', 'success'); 
         }
       );
@@ -1029,7 +1185,7 @@ function renderStats() {
 function renderSummaryCards(keys) {
   if (!keys.length) { DOM.statsSummary.innerHTML = ''; return; }
 
-  let totalSolves = 0, globalPB = Infinity, totalTime = 0;
+  let totalSolves = 0, totalTime = 0;
   for (const key of keys) {
     const rec = S.times[key];
     if (!rec?.times?.length) continue;
@@ -1037,7 +1193,6 @@ function renderSummaryCards(keys) {
     if (!st) continue;
     totalSolves += st.count;
     totalTime   += st.mean * st.count;
-    if (st.pb < globalPB) globalPB = st.pb;
   }
   const globalMean = totalSolves > 0 ? totalTime / totalSolves : null;
 
@@ -1049,10 +1204,6 @@ function renderSummaryCards(keys) {
     <div class="summary-card">
       <span class="summary-card-label">Casos Practicados</span>
       <span class="summary-card-value">${keys.length}</span>
-    </div>
-    <div class="summary-card">
-      <span class="summary-card-label">Mejor Tiempo (PB)</span>
-      <span class="summary-card-value accent">${globalPB !== Infinity ? fmtTime(globalPB) : '—'}</span>
     </div>
     <div class="summary-card">
       <span class="summary-card-label">Media Global</span>
@@ -1108,6 +1259,7 @@ function importStats(file) {
       }
       saveTimes();
       renderStats();
+      renderAccordion(DOM.caseSearch.value);
       showToast(`Importado: ${added} nuevos casos, ${merged} tiempos fusionados`, 'success');
     } catch (err) {
       showToast('Error al importar: archivo no válido', 'error');
@@ -1116,6 +1268,38 @@ function importStats(file) {
     }
   };
   reader.readAsText(file);
+}
+
+function selectByFilter(predicate, label) {
+  const keys = listAllCaseKeys().filter(key => predicate(getCaseMetricsByKey(key)));
+  S.selection = new Set(keys);
+  onSelectionChange();
+  renderAccordion(DOM.caseSearch.value);
+  showToast(`Filtro "${label}": ${keys.length} casos`, 'info');
+}
+
+function startWeakSession(target = 15) {
+  const sourceKeys = [...S.selection];
+  if (!sourceKeys.length) {
+    showToast('Selecciona casos primero para iniciar la sesión', 'error');
+    return;
+  }
+
+  const practicedKeys = sourceKeys.filter(key => getCaseMetricsByKey(key).count > 0);
+  if (practicedKeys.length < target) {
+    showToast(`Necesitas al menos ${target} casos ya practicados entre los seleccionados`, 'error', 4500);
+    return;
+  }
+
+  const weakKeys = rankWeakCaseKeys(practicedKeys).slice(0, target);
+  S.session.active = true;
+  S.session.target = target;
+  S.session.done = 0;
+  S.session.times = [];
+  S.session.weakKeys = weakKeys;
+  updateSessionStatus();
+  displayScramble(pickRandomEntry());
+  showToast(`Sesión iniciada: ${target} casos flojos`, 'success');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1201,6 +1385,24 @@ function initEvents() {
     showToast('Listas cerradas', 'info');
   });
 
+  DOM.filterSlowBtn?.addEventListener('click', () =>
+    selectByFilter(m => m.mean != null && m.mean > 2000, '> 2.0s')
+  );
+  DOM.filterLowBtn?.addEventListener('click', () =>
+    selectByFilter(m => m.count > 0 && m.count < 10, '< 10 solves')
+  );
+  DOM.filterUnseenBtn?.addEventListener('click', () =>
+    selectByFilter(m => m.count === 0, 'sin practicar')
+  );
+  DOM.repeatWeakBtn?.addEventListener('click', () => {
+    const key = DOM.repeatWeakBtn.dataset.key;
+    if (!key) return;
+    S.forcedNextKey = key;
+    hideResult();
+    displayScramble(pickRandomEntry());
+    showToast('Caso fijado para repetir', 'info');
+  });
+
   // ── Case search ───────────────────────────────────────────
   let searchTimer;
   DOM.caseSearch.addEventListener('input', () => {
@@ -1262,12 +1464,17 @@ function initEvents() {
   DOM.exportBtn.addEventListener('click', exportStats);
   DOM.importFile.addEventListener('change', e => importStats(e.target.files?.[0]));
 
+  // ── Stats filters ──────────────────────────────────────────
+  DOM.statsSearch?.addEventListener('input', () => renderStats());
+  DOM.statsSetFilter?.addEventListener('change', () => renderStats());
+  DOM.statsLevelFilter?.addEventListener('change', () => renderStats());
+
   // ── Clear all stats ───────────────────────────────────────
   DOM.clearBtn.addEventListener('click', () => {
     showConfirm(
       '¿Borrar todas las estadísticas?',
       'Esta acción eliminará TODOS los tiempos registrados de TODOS los casos. No se puede deshacer.',
-      () => { S.times = {}; saveTimes(); renderStats(); showToast('Estadísticas eliminadas', 'success'); }
+      () => { S.times = {}; saveTimes(); renderStats(); renderAccordion(DOM.caseSearch.value); showToast('Estadísticas eliminadas', 'success'); }
     );
   });
 }
@@ -1294,6 +1501,7 @@ async function init() {
   // Render UI
   renderAccordion();
   updateSelectionBadge();
+  updateSessionStatus();
   renderStats();
 
   // Pick first scramble

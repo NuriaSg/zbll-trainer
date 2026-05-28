@@ -69,6 +69,12 @@
         <input type="search" id="case-search" class="search-input" placeholder="Buscar caso…" autocomplete="off" />
       </div>
 
+      <div class="sidebar-train-tools" aria-label="Herramientas de entrenamiento">
+        <button id="filter-slow-btn" class="btn btn-sm btn-ghost" title="Casos con media mayor de 2.0s">&gt; 2.0s</button>
+        <button id="filter-low-btn" class="btn btn-sm btn-ghost" title="Casos con menos de 10 resoluciones">&lt; 10</button>
+        <button id="filter-unseen-btn" class="btn btn-sm btn-ghost" title="Casos sin practicar">Sin practicar</button>
+      </div>
+
       <!-- Accordion rendered by JS -->
       <div id="accordion" class="accordion" role="list"></div>
 
@@ -121,7 +127,7 @@
           <div class="result-time-row">
             <span class="result-label">Tiempo:</span>
             <span id="result-time" class="result-time-val">—</span>
-            <span id="result-pb-tag" class="pb-tag hidden">🏆 PB!</span>
+            <button id="repeat-weak-btn" class="btn btn-sm btn-outline hidden" title="Repetir este caso para consolidarlo">Repetir caso</button>
           </div>
 
           <div class="result-case-row">
@@ -177,6 +183,18 @@
       <!-- JS renders summary cards here -->
     </div>
 
+    <div class="stats-filters" aria-label="Filtros de estadísticas">
+      <input id="stats-search" class="search-input stats-search" type="search" placeholder="Buscar caso o set…" autocomplete="off" />
+      <select id="stats-set-filter" class="stats-select">
+        <option value="all">Todos los sets</option>
+      </select>
+      <select id="stats-level-filter" class="stats-select">
+        <option value="all">Todos</option>
+        <option value="weak">Solo flojos</option>
+        <option value="strong">Solo dominados</option>
+      </select>
+    </div>
+
     <div class="stats-table-wrap" role="region" aria-label="Tabla de tiempos" tabindex="0">
       <table id="stats-table" class="stats-table" aria-sort="none">
         <thead>
@@ -184,7 +202,6 @@
             <th class="sortable" data-col="set" tabindex="0" role="columnheader" aria-sort="ascending">Set <span class="sort-arrow">↕</span></th>
             <th class="sortable" data-col="case" tabindex="0" role="columnheader">Caso <span class="sort-arrow">↕</span></th>
             <th class="sortable" data-col="count" tabindex="0" role="columnheader">Count <span class="sort-arrow">↕</span></th>
-            <th class="sortable" data-col="pb" tabindex="0" role="columnheader">PB <span class="sort-arrow">↕</span></th>
             <th class="sortable" data-col="mean" tabindex="0" role="columnheader">Media <span class="sort-arrow">↕</span></th>
             <th class="sortable" data-col="ao5" tabindex="0" role="columnheader">Ao5 <span class="sort-arrow">↕</span></th>
             <th class="sortable" data-col="ao12" tabindex="0" role="columnheader">Ao12 <span class="sort-arrow">↕</span></th>
