@@ -36,6 +36,8 @@ const S = {
     times: [],
   },
   forcedNextKey: null,
+  caseShownCounts: {},
+  recentCaseKeys: [],
   study:             {},        // { "set||case": { studyAlg, notes, updatedAt } }
   studyCurrentKey:   null,
   studyEditingAlg:   false,
@@ -149,8 +151,9 @@ const LS = {
 const MAX_TIMES_PER_CASE = 50;
 const STUDY_OFFICIAL_ALG_PREVIEW = 5;
 const STATS_ALG_PREVIEW = 3;
-/** Caso dominado: último solve o media de los 3 últimos por debajo de 2.2s */
-const DOMINATED_MAX_MS = 2200;
+/** Caso dominado: último solve o media de los 3 últimos por debajo de 3.0s */
+const DOMINATED_MAX_MS = 3000;
+const RECENT_CASE_WINDOW = 2;
 /** Mezcla válida: sin x/y/z/M/E/S y como máximo 2 wide (r f b…) en minúscula */
 const MAX_WIDE_MOVES = 2;
 const ROTATION_SLICE_MOVE = /^[xyzmse](?:2|')?$/i;
@@ -481,8 +484,23 @@ function saveSelection() {
   updateSelectionBadge();
 }
 
+function resetPracticeDistributionMemory() {
+  S.caseShownCounts = {};
+  S.recentCaseKeys = [];
+}
+
+function registerCaseShown(key) {
+  if (!key) return;
+  S.caseShownCounts[key] = (S.caseShownCounts[key] ?? 0) + 1;
+  S.recentCaseKeys.push(key);
+  if (S.recentCaseKeys.length > RECENT_CASE_WINDOW) {
+    S.recentCaseKeys.shift();
+  }
+}
+
 function onSelectionChange() {
   saveSelection();
+  resetPracticeDistributionMemory();
   if (S.selection.size === 0) {
     displayScramble(null);
     hideResult();
@@ -570,12 +588,21 @@ function getPracticeMeanStats(keys) {
   return { min, max, range: Math.max(1, max - min) };
 }
 
+function getPracticeCountStats(keys) {
+  const counts = keys
+    .map(k => getCaseMetricsByKey(k).count)
+    .filter(v => v > 0);
+  const min = counts.length ? Math.min(...counts) : 0;
+  const max = counts.length ? Math.max(...counts) : 0;
+  return { min, max, range: Math.max(1, max - min) };
+}
+
 /**
  * Peso para elegir el siguiente caso en práctica libre.
  * - Sin solves: prioridad alta frente a practicados.
- * - Con solves: sesgo suave hacia los más lentos + menos repetición de mucho vistos.
+ * - Con solves: combina debilidad + poco practicado + anti-repetición reciente.
  */
-function computeCasePickWeight(key, meanStats) {
+function computeCasePickWeight(key, meanStats, countStats, shownCount = 0, wasRecent = false) {
   const { count, mean } = getCaseMetricsByKey(key);
   if (count === 0) return 12;
 
@@ -583,15 +610,15 @@ function computeCasePickWeight(key, meanStats) {
   if (mean != null) {
     meanNorm = Math.max(0, Math.min(1, (mean - meanStats.min) / meanStats.range));
   }
-  const weaknessBoost = 1 + 0.7 * meanNorm;
-  const lowPracticeBoost = count <= 2 ? 1.2 : (count <= 5 ? 1.08 : 1);
-  const repetitionDampen = 1 / (1 + Math.log1p(count) * 0.38);
+  const lessPracticedNorm = Math.max(0, Math.min(1, (countStats.max - count) / countStats.range));
 
-  return weaknessBoost * lowPracticeBoost * repetitionDampen;
-}
+  const weaknessBoost = 0.9 + 1.1 * meanNorm;
+  const lessPracticedBoost = 1 + 1.25 * lessPracticedNorm;
+  const historicalRepetitionDampen = 1 / (1 + Math.log1p(count) * 0.55);
+  const shownDampen = 1 / (1 + shownCount * 0.75);
+  const recentDampen = wasRecent ? 0.35 : 1;
 
-function scoreWeakness(key, meanMin, meanRange) {
-  return computeCasePickWeight(key, { min: meanMin, max: meanMin + meanRange, range: meanRange });
+  return weaknessBoost * lessPracticedBoost * historicalRepetitionDampen * shownDampen * recentDampen;
 }
 
 function rankWeakCaseKeys(keys) {
@@ -599,9 +626,11 @@ function rankWeakCaseKeys(keys) {
   const meanMin = means.length ? Math.min(...means) : 0;
   const meanMax = means.length ? Math.max(...means) : 0;
   const meanRange = Math.max(1, meanMax - meanMin);
+  const countStats = getPracticeCountStats(keys);
 
   return [...keys].sort((a, b) =>
-    scoreWeakness(b, meanMin, meanRange) - scoreWeakness(a, meanMin, meanRange)
+    computeCasePickWeight(b, { min: meanMin, max: meanMax, range: meanRange }, countStats, 0, false)
+    - computeCasePickWeight(a, { min: meanMin, max: meanMax, range: meanRange }, countStats, 0, false)
   );
 }
 
@@ -1036,9 +1065,16 @@ function pickRandomEntry() {
   if (!casePool.length) return null;
 
   const meanStats = getPracticeMeanStats(activeKeys);
+  const countStats = getPracticeCountStats(activeKeys);
   const weighted = casePool.map(c => ({
     ...c,
-    weight: computeCasePickWeight(c.key, meanStats),
+    weight: computeCasePickWeight(
+      c.key,
+      meanStats,
+      countStats,
+      S.caseShownCounts[c.key] ?? 0,
+      S.recentCaseKeys.includes(c.key)
+    ),
   }));
 
   const lastKey = S.lastEntry
@@ -1084,6 +1120,11 @@ function displayScramble(entry) {
     DOM.copySetupBtn.toggleAttribute('disabled', !entry.scramble?.trim());
   }
   DOM.nextScrambleBtn?.removeAttribute('disabled');
+
+  if (S.appView === 'practice') {
+    const key = makeKey(entry.set_name, entry.case_name);
+    registerCaseShown(key);
+  }
 
   // Info bar — hide case name (revealed after solve)
   DOM.infoSet.textContent = entry.set_name;
@@ -1907,6 +1948,7 @@ function startWeakSession(target = 15) {
   S.session.done = 0;
   S.session.times = [];
   S.session.weakKeys = weakKeys;
+  resetPracticeDistributionMemory();
   updateSessionStatus();
   displayScramble(pickRandomEntry());
   showToast(`Sesión iniciada: ${target} casos flojos`, 'success');
