@@ -23,6 +23,7 @@ const S = {
   },
   currentEntry: null,      // entry currently shown as scramble
   lastEntry:    null,      // entry just solved (used for result display)
+  lastRecorded: null,      // { key, ts, ms } — último tiempo guardado (para descartar)
   sortCol:      'set',
   sortDir:      1,
   installPrompt: null,
@@ -70,6 +71,7 @@ const DOM = {
   // Scramble
   practiceTop:     $id('practice-top'),
   scrambleMoves:   $id('scramble-moves'),
+  copySetupBtn:    $id('copy-setup-btn'),
   nextScrambleBtn: $id('next-scramble-btn'),
   // Timer
   timerArea:       $id('timer-area'),
@@ -79,10 +81,12 @@ const DOM = {
   // Result
   resultSection:   $id('result-section'),
   resultTime:      $id('result-time'),
+  discardLastTimeBtn: $id('discard-last-time-btn'),
   repeatWeakBtn:   $id('repeat-weak-btn'),
   openStudyBtn:    $id('open-study-btn'),
   caseImg:         $id('case-img'),
   caseImgFallback: $id('case-img-fallback'),
+  resultSetupText: $id('result-setup-text'),
   resultAlgText:   $id('result-alg-text'),
   resultCaseName:  $id('result-case-name'),
   // Stats
@@ -108,6 +112,8 @@ const DOM = {
   studyNextBtn:    $id('study-next-btn'),
   studyCaseImg:    $id('study-case-img'),
   studyImgFallback:$id('study-img-fallback'),
+  studySetupMoves:   $id('study-setup-moves'),
+  studySetupCopyBtn: $id('study-setup-copy-btn'),
   studyOfficialAlgs: $id('study-official-algs'),
   studyAlgInput:     $id('study-alg-input'),
   studyMyAlgView:    $id('study-my-alg-view'),
@@ -142,6 +148,7 @@ const LS = {
 };
 const MAX_TIMES_PER_CASE = 50;
 const STUDY_OFFICIAL_ALG_PREVIEW = 5;
+const STATS_ALG_PREVIEW = 3;
 
 // ══════════════════════════════════════════════════════════════
 // UTILS
@@ -233,53 +240,103 @@ function getUniqueAlgorithmEntries(entries) {
   return out;
 }
 
-function renderStudyOfficialAlgs(entries) {
-  if (!DOM.studyOfficialAlgs) return;
+function copyTextToClipboard(text, okMsg = 'Copiado', errMsg = 'Error al copiar') {
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(
+    () => showToast(okMsg, 'success'),
+    () => showToast(errMsg, 'error')
+  );
+}
 
+/** Una mezcla recomendada por caso (la misma lógica que en Practicar). */
+function renderStudyCaseSetup(entries) {
+  if (!DOM.studySetupMoves) return;
+
+  const preferred = pickPreferredEntry(entries);
+  const scramble = preferred?.scramble?.trim() ?? '';
+
+  if (!scramble) {
+    DOM.studySetupMoves.innerHTML = '<span class="study-setup-empty">Sin mezcla en la base de datos.</span>';
+    DOM.studySetupCopyBtn?.setAttribute('disabled', 'disabled');
+    if (DOM.studySetupCopyBtn) DOM.studySetupCopyBtn.dataset.text = '';
+    return;
+  }
+
+  DOM.studySetupMoves.innerHTML = formatMoves(scramble);
+  DOM.studySetupCopyBtn?.removeAttribute('disabled');
+  if (DOM.studySetupCopyBtn) DOM.studySetupCopyBtn.dataset.text = scramble;
+}
+
+function buildCollapsibleAlgsHtml(entries, previewCount, classes) {
   const unique = getUniqueAlgorithmEntries(entries);
-  const visible = unique.slice(0, STUDY_OFFICIAL_ALG_PREVIEW);
-  const hidden  = unique.slice(STUDY_OFFICIAL_ALG_PREVIEW);
+  const visible = unique.slice(0, previewCount);
+  const hidden  = unique.slice(previewCount);
+  const { item: itemCls, text: textCls, toggle: toggleCls, more: moreCls, empty: emptyCls } = classes;
 
   const itemHtml = entry => `
-    <div class="study-official-item">
-      <span class="study-official-text">${esc(entry.algorithm)}</span>
+    <div class="${itemCls}">
+      <span class="${textCls}">${esc(entry.algorithm)}</span>
       <button type="button" class="btn-copy" data-text="${esc(entry.algorithm)}">Copiar</button>
     </div>`;
 
-  let html = visible.map(itemHtml).join('');
+  if (!unique.length) {
+    return `<p class="${emptyCls}">Sin algoritmos en la base de datos.</p>`;
+  }
 
+  let html = visible.map(itemHtml).join('');
   if (hidden.length) {
     html += `
-      <button type="button" class="btn btn-ghost btn-sm study-algs-toggle" aria-expanded="false">
+      <button type="button" class="btn btn-ghost btn-sm ${toggleCls}" aria-expanded="false">
         Ver ${hidden.length} algoritmo${hidden.length !== 1 ? 's' : ''} más
       </button>
-      <div class="study-algs-more hidden">
+      <div class="${moreCls} hidden">
         ${hidden.map(itemHtml).join('')}
       </div>`;
   }
+  return html;
+}
 
-  DOM.studyOfficialAlgs.innerHTML = html || '<p class="study-no-algs">Sin algoritmos en la base de datos.</p>';
-
-  DOM.studyOfficialAlgs.querySelectorAll('.btn-copy').forEach(btn => {
-    btn.addEventListener('click', () => {
-      navigator.clipboard.writeText(btn.dataset.text).then(
-        () => showToast('Algoritmo copiado', 'success'),
-        () => showToast('Error al copiar', 'error')
-      );
-    });
-  });
-
-  const toggle = DOM.studyOfficialAlgs.querySelector('.study-algs-toggle');
-  const more   = DOM.studyOfficialAlgs.querySelector('.study-algs-more');
-  if (toggle && more) {
+function bindCollapsibleAlgs(container) {
+  if (!container) return;
+  container.querySelectorAll('.study-algs-toggle, .details-algs-toggle').forEach(toggle => {
+    const more = toggle.nextElementSibling;
+    if (!more?.classList.contains('study-algs-more') && !more?.classList.contains('details-algs-more')) return;
+    const hiddenCount = more.querySelectorAll('.study-official-item, .details-alg-item').length;
     toggle.addEventListener('click', () => {
       const collapsed = more.classList.toggle('hidden');
       toggle.setAttribute('aria-expanded', String(!collapsed));
       toggle.textContent = collapsed
-        ? `Ver ${hidden.length} algoritmo${hidden.length !== 1 ? 's' : ''} más`
+        ? `Ver ${hiddenCount} algoritmo${hiddenCount !== 1 ? 's' : ''} más`
         : 'Ocultar algoritmos extra';
     });
-  }
+  });
+}
+
+function renderStudyOfficialAlgs(entries) {
+  if (!DOM.studyOfficialAlgs) return;
+
+  DOM.studyOfficialAlgs.innerHTML = buildCollapsibleAlgsHtml(entries, STUDY_OFFICIAL_ALG_PREVIEW, {
+    item: 'study-official-item',
+    text: 'study-official-text',
+    toggle: 'study-algs-toggle',
+    more: 'study-algs-more',
+    empty: 'study-no-algs',
+  });
+
+  bindCollapsibleAlgs(DOM.studyOfficialAlgs);
+  DOM.studyOfficialAlgs.querySelectorAll('.btn-copy').forEach(btn => {
+    btn.addEventListener('click', () => copyTextToClipboard(btn.dataset.text, 'Algoritmo copiado'));
+  });
+}
+
+function buildStatsAlgsHtml(entries) {
+  return buildCollapsibleAlgsHtml(entries, STATS_ALG_PREVIEW, {
+    item: 'details-alg-item',
+    text: 'details-alg-text',
+    toggle: 'details-algs-toggle',
+    more: 'details-algs-more',
+    empty: 'details-no-algs',
+  });
 }
 
 function refreshStudyPersonalUI() {
@@ -762,7 +819,14 @@ function renderAccordion(filter = '') {
       toggleSet(setName, setEl);
     });
     hdr.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSet(setName, setEl); }
+      if (e.key === ' ') {
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        toggleSet(setName, setEl);
+      }
     });
 
     setChk?.addEventListener('change', e => {
@@ -781,7 +845,11 @@ function renderAccordion(filter = '') {
         toggleSubset(setName, subsetNum, subsetEl);
       });
       hdr.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (e.key === ' ') {
+          e.preventDefault();
+          return;
+        }
+        if (e.key === 'Enter') {
           e.preventDefault();
           toggleSubset(setName, subsetNum, subsetEl);
         }
@@ -942,6 +1010,10 @@ function displayScramble(entry) {
   }
 
   DOM.scrambleMoves.innerHTML = formatMoves(entry.scramble);
+  if (DOM.copySetupBtn) {
+    DOM.copySetupBtn.dataset.text = entry.scramble?.trim() ?? '';
+    DOM.copySetupBtn.toggleAttribute('disabled', !entry.scramble?.trim());
+  }
   DOM.nextScrambleBtn?.removeAttribute('disabled');
 
   // Info bar — hide case name (revealed after solve)
@@ -954,6 +1026,12 @@ function displayScramble(entry) {
 function isPracticeShortcutBlocked() {
   const tag = document.activeElement?.tagName ?? '';
   return ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(tag);
+}
+
+/** Atajos del cronómetro (espacio, N, R): siempre en Practicar salvo campos de texto o botones. */
+function isTimerKeyboardBlocked() {
+  if (S.appView !== 'practice') return true;
+  return isPracticeShortcutBlocked();
 }
 
 function goNextScramble() {
@@ -1019,7 +1097,7 @@ function setTimerPhase(phase) {
 function onPress(e) {
   if (e?.repeat) return; // ignore held key
 
-  if (isPracticeShortcutBlocked()) return;
+  if (isTimerKeyboardBlocked()) return;
 
   const phase = S.timer.phase;
 
@@ -1071,7 +1149,12 @@ function stopTimer() {
   // Save and display result
   const entry = S.lastEntry;
   if (entry) {
-    const isPB = recordTime(entry, elapsedMs);
+    const { isPB, ts } = recordTime(entry, elapsedMs);
+    S.lastRecorded = {
+      key: makeKey(entry.set_name, entry.case_name),
+      ts,
+      ms: elapsedMs,
+    };
     showResult(entry, elapsedMs, isPB);
 
     if (S.session.active) {
@@ -1105,7 +1188,7 @@ function showResult(entry, timeMs, isPB) {
   // Time value
   DOM.resultTime.textContent = fmtTime(timeMs);
 
-  // Algorithm
+  if (DOM.resultSetupText) DOM.resultSetupText.textContent = entry.scramble ?? '—';
   DOM.resultAlgText.textContent = entry.algorithm;
 
   // Case name
@@ -1119,6 +1202,7 @@ function showResult(entry, timeMs, isPB) {
     DOM.openStudyBtn.dataset.key = resultKey;
     DOM.openStudyBtn.classList.remove('hidden');
   }
+  DOM.discardLastTimeBtn?.classList.remove('hidden');
 
   // Update info bar case name now that solve is done
   DOM.infoCase.textContent = entry.case_name;
@@ -1134,6 +1218,7 @@ function hideResult() {
   DOM.resultSection.classList.add('hidden');
   DOM.caseImg.src = '';
   DOM.infoCase.textContent = '';
+  DOM.discardLastTimeBtn?.classList.add('hidden');
   DOM.repeatWeakBtn?.classList.add('hidden');
   DOM.openStudyBtn?.classList.add('hidden');
 }
@@ -1235,7 +1320,7 @@ function setAppView(view) {
   }
 }
 
-function openStudyCase(key) {
+function openStudyCase(key, { scroll = true } = {}) {
   if (!key || !S.grouped) return;
   const { set, cas } = parseKey(key);
   const entries = S.grouped[set]?.[cas];
@@ -1253,6 +1338,7 @@ function openStudyCase(key) {
   if (DOM.studyCaseName) DOM.studyCaseName.textContent = cas;
 
   loadCaseDiagram(DOM.studyCaseImg, DOM.studyImgFallback, set, cas, primaryAlg);
+  renderStudyCaseSetup(entries);
   renderStudyOfficialAlgs(entries);
 
   const rec = getStudyRecord(key);
@@ -1268,9 +1354,11 @@ function openStudyCase(key) {
 
   renderAccordion(DOM.caseSearch?.value ?? '');
 
-  DOM.studyDetail?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (scroll) {
+    DOM.studyDetail?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 
-  if (window.matchMedia('(max-width: 768px)').matches) {
+  if (scroll && window.matchMedia('(max-width: 768px)').matches) {
     document.body.classList.remove('sidebar-open');
     DOM.sidebarToggle?.setAttribute('aria-expanded', 'false');
   }
@@ -1281,7 +1369,7 @@ function navigateStudy(delta) {
   const idx = keys.indexOf(S.studyCurrentKey);
   if (idx < 0) return;
   const next = keys[idx + delta];
-  if (next) openStudyCase(next);
+  if (next) openStudyCase(next, { scroll: false });
 }
 
 function openStudyFromKey(key) {
@@ -1302,7 +1390,7 @@ function practiceStudyCaseOnly() {
   showToast('Practicando solo este caso', 'info');
 }
 
-/** Record a time, returns true if it's a new PB */
+/** Record a time; returns { isPB, ts } for the new entry */
 function recordTime(entry, ms) {
   const key = makeKey(entry.set_name, entry.case_name);
   if (!S.times[key]) {
@@ -1313,12 +1401,55 @@ function recordTime(entry, ms) {
     ? Math.min(...record.times.map(t => t.time))
     : Infinity;
 
-  record.times.push({ id: entry.id, time: ms, ts: Date.now() });
+  const ts = Date.now();
+  record.times.push({ id: entry.id, time: ms, ts });
   if (record.times.length > MAX_TIMES_PER_CASE) {
     record.times = record.times.slice(-MAX_TIMES_PER_CASE);
   }
   saveTimes();
-  return ms < prevPB;
+  return { isPB: ms < prevPB, ts };
+}
+
+function deleteTimeRecord(key, ts) {
+  const rec = S.times[key];
+  if (!rec) return false;
+  const before = rec.times.length;
+  rec.times = rec.times.filter(t => t.ts !== ts);
+  if (rec.times.length === before) return false;
+  if (rec.times.length === 0) {
+    delete S.times[key];
+    if (S.expandedKey === key) S.expandedKey = null;
+  }
+  saveTimes();
+  return true;
+}
+
+function discardLastRecordedTime() {
+  const last = S.lastRecorded;
+  if (!last?.key || last.ts == null) {
+    showToast('No hay un tiempo reciente que descartar', 'info');
+    return;
+  }
+
+  if (!deleteTimeRecord(last.key, last.ts)) {
+    showToast('No se pudo eliminar el tiempo', 'error');
+    return;
+  }
+
+  if (S.session.active && S.session.times.length > 0) {
+    const idx = S.session.times.length - 1;
+    if (S.session.times[idx] === last.ms) {
+      S.session.times.pop();
+      S.session.done = Math.max(0, S.session.done - 1);
+      updateSessionStatus();
+    }
+  }
+
+  S.lastRecorded = null;
+  hideResult();
+  renderStats();
+  renderAccordion(DOM.caseSearch?.value ?? '');
+  showToast('Tiempo descartado', 'success');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1459,14 +1590,9 @@ function renderStats() {
               </div>
 
               <div class="details-info">
-                <div class="details-algs-section">
-                  <span class="details-section-title">Algoritmos Disponibles</span>
-                  ${entries.map(entry => `
-                    <div class="details-alg-item">
-                      <span class="details-alg-text">${esc(entry.algorithm)}</span>
-                      <button class="btn-copy" data-text="${esc(entry.algorithm)}">Copiar</button>
-                    </div>
-                  `).join('')}
+                <div class="details-algs-section" data-stats-algs>
+                  <span class="details-section-title">Algoritmos disponibles</span>
+                  ${buildStatsAlgsHtml(entries)}
                 </div>
 
                 <div class="details-history-section">
@@ -1475,7 +1601,7 @@ function renderStats() {
                     ${rec.times.map((t, idx) => `
                       <span class="details-history-item">
                         #${idx + 1}: <span class="details-history-time">${fmtTime(t.time)}</span>
-                        <button class="btn-delete-time" data-key="${esc(row.key)}" data-ts="${t.ts}" title="Eliminar este tiempo">&times;</button>
+                        <button type="button" class="btn-delete-time" data-key="${esc(row.key)}" data-ts="${t.ts}" title="Borrar este tiempo" aria-label="Borrar tiempo ${idx + 1}">×</button>
                       </span>
                     `).join('')}
                   </div>
@@ -1500,6 +1626,10 @@ function renderStats() {
     });
   });
 
+  DOM.statsTbody.querySelectorAll('[data-stats-algs]').forEach(section => {
+    bindCollapsibleAlgs(section);
+  });
+
   // Copy buttons
   DOM.statsTbody.querySelectorAll('.btn-copy').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1517,14 +1647,10 @@ function renderStats() {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
       const ts = parseInt(btn.dataset.ts, 10);
-      const rec = S.times[key];
-      if (rec) {
-        rec.times = rec.times.filter(t => t.ts !== ts);
-        if (rec.times.length === 0) {
-          delete S.times[key];
-          if (S.expandedKey === key) S.expandedKey = null;
+      if (deleteTimeRecord(key, ts)) {
+        if (S.lastRecorded?.key === key && S.lastRecorded?.ts === ts) {
+          S.lastRecorded = null;
         }
-        saveTimes();
         renderStats();
         renderAccordion(DOM.caseSearch.value);
         showToast('Tiempo eliminado', 'success');
@@ -1793,9 +1919,16 @@ function initEvents() {
   DOM.filterUnseenBtn?.addEventListener('click', () =>
     selectByFilter(m => m.count === 0, 'sin practicar')
   );
+  DOM.discardLastTimeBtn?.addEventListener('click', discardLastRecordedTime);
   DOM.repeatWeakBtn?.addEventListener('click', repeatLastCase);
   DOM.openStudyBtn?.addEventListener('click', () => openStudyFromKey(DOM.openStudyBtn.dataset.key));
   DOM.nextScrambleBtn?.addEventListener('click', goNextScramble);
+  DOM.copySetupBtn?.addEventListener('click', () =>
+    copyTextToClipboard(DOM.copySetupBtn?.dataset.text, 'Mezcla copiada')
+  );
+  DOM.studySetupCopyBtn?.addEventListener('click', () =>
+    copyTextToClipboard(DOM.studySetupCopyBtn?.dataset.text, 'Mezcla copiada')
+  );
 
   // ── App navigation ─────────────────────────────────────────
   DOM.navBtns?.forEach(btn => {
@@ -1811,7 +1944,11 @@ function initEvents() {
   });
   DOM.accordion.addEventListener('keydown', e => {
     if (S.appView !== 'study') return;
-    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (e.key === ' ') {
+      e.preventDefault();
+      return;
+    }
+    if (e.key !== 'Enter') return;
     const item = e.target.closest('.acc-case-item[role="button"]');
     if (!item?.dataset.key) return;
     e.preventDefault();
@@ -1855,7 +1992,7 @@ function initEvents() {
 
   // ── Practice shortcuts (desktop): N = nuevo, R = repetir ───
   window.addEventListener('keydown', e => {
-    if (isPracticeShortcutBlocked()) return;
+    if (isTimerKeyboardBlocked()) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
     const key = e.key.toLowerCase();
@@ -1871,11 +2008,13 @@ function initEvents() {
   // ── Timer — Keyboard (Space) ──────────────────────────────
   window.addEventListener('keydown', e => {
     if (e.code !== 'Space') return;
+    if (isTimerKeyboardBlocked()) return;
     e.preventDefault();
     onPress(e);
   });
   window.addEventListener('keyup', e => {
     if (e.code !== 'Space') return;
+    if (isTimerKeyboardBlocked()) return;
     e.preventDefault();
     onRelease();
   });

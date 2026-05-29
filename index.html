@@ -142,8 +142,11 @@
           <div class="result-time-row">
             <span class="result-label">Tiempo:</span>
             <span id="result-time" class="result-time-val">—</span>
+            <button id="discard-last-time-btn" class="btn btn-sm btn-outline hidden" type="button" title="Quitar este tiempo de las estadísticas (por ejemplo, si paraste sin querer)">
+              🗑 Descartar tiempo
+            </button>
             <button id="repeat-weak-btn" class="btn btn-sm btn-outline hidden" title="Mostrar el mismo caso en el siguiente scramble">Repetir caso</button>
-            <button id="open-study-btn" class="btn btn-sm btn-ghost hidden" type="button" title="Ver algoritmos y notas de este caso">📖 Aprender caso</button>
+            <button id="open-study-btn" class="btn btn-sm btn-outline hidden" type="button" title="Ver algoritmos y notas de este caso">📖 Aprender caso</button>
           </div>
 
           <div class="result-case-row">
@@ -199,6 +202,12 @@
             </div>
 
             <div class="study-fields">
+              <div class="study-block study-block-setup">
+                <h3 class="study-block-title">Mezcla</h3>
+                <div id="study-setup-moves" class="study-setup-moves" aria-live="polite"></div>
+                <button type="button" id="study-setup-copy-btn" class="btn btn-outline btn-sm">Copiar mezcla</button>
+              </div>
+
               <div class="study-block study-block-primary">
                 <h3 class="study-block-title">Mi algoritmo</h3>
                 <div class="study-my-alg-row">
