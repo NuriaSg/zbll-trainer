@@ -59,7 +59,6 @@ const DOM = {
   selectAllBtn:    $id('select-all-btn'),
   deselectAllBtn:  $id('deselect-all-btn'),
   collapseAllBtn:  $id('collapse-all-btn'),
-  practiceCollapseAllBtn: $id('practice-collapse-all-btn'),
   caseSearch:      $id('case-search'),
   filterSlowBtn:   $id('filter-slow-btn'),
   filterLowBtn:    $id('filter-low-btn'),
@@ -168,33 +167,33 @@ function invertScramble(scramble) {
 }
 
 /**
- * Build a visualcube.app URL to render the ZBLL case.
- * We pass the INVERSE of the algorithm so that visualcube
- * shows the cube state that the algorithm would solve.
+ * Ruta local de la imagen del caso (una por set+caso, 256px).
+ * Generar con: node scripts/generate-case-images.mjs
  */
+function caseImageUrl(setName, caseName) {
+  return `./images/cases/${setName}/${caseName}.png`;
+}
+
+/** Fallback VisualCube si falta la imagen local */
 function buildVisualCubeUrl(algorithm, size = 200) {
   const inv = invertScramble(algorithm);
   const enc = encodeURIComponent(inv);
-  // stage=ll  → renders only the last layer
-  // view=plan → top-down view
-  // sch=yrgwob → U=yellow R=red F=green D=white L=orange B=blue
   return `https://visualcube.api.cubing.net/visualcube.php?fmt=png&size=${size}&stage=ll&view=plan&sch=yrgwob&alg=${enc}`;
 }
 
-/** Load VisualCube diagram into an img (eager; works when panel was hidden) */
-function loadCaseDiagram(imgEl, fallbackEl, algorithm, size = 200) {
+/** Carga diagrama del caso: imagen local primero, VisualCube si falla */
+function loadCaseDiagram(imgEl, fallbackEl, setName, caseName, algorithmFallback = '') {
   if (!imgEl) return;
-  if (!algorithm?.trim()) {
+  if (!setName || !caseName) {
     imgEl.classList.add('hidden');
     imgEl.removeAttribute('src');
     fallbackEl?.classList.remove('hidden');
     return;
   }
 
-  const url = buildVisualCubeUrl(algorithm, size);
+  const url = caseImageUrl(setName, caseName);
   imgEl.loading = 'eager';
   imgEl.decoding = 'async';
-  imgEl.referrerPolicy = 'no-referrer';
 
   fallbackEl?.classList.add('hidden');
   imgEl.classList.remove('hidden');
@@ -204,12 +203,21 @@ function loadCaseDiagram(imgEl, fallbackEl, algorithm, size = 200) {
     fallbackEl?.classList.add('hidden');
   };
   imgEl.onerror = () => {
+    if (algorithmFallback?.trim()) {
+      const vcUrl = buildVisualCubeUrl(algorithmFallback);
+      imgEl.onerror = () => {
+        imgEl.classList.add('hidden');
+        imgEl.removeAttribute('src');
+        fallbackEl?.classList.remove('hidden');
+      };
+      imgEl.src = vcUrl;
+      return;
+    }
     imgEl.classList.add('hidden');
     imgEl.removeAttribute('src');
     fallbackEl?.classList.remove('hidden');
   };
 
-  if (imgEl.src === url) imgEl.src = '';
   imgEl.src = url;
 }
 
@@ -483,12 +491,38 @@ function getCaseMetricsByKey(key) {
   return { count, mean };
 }
 
-function scoreWeakness(key, meanMin, meanRange) {
+/** Estadísticas de media entre casos ya practicados del pool */
+function getPracticeMeanStats(keys) {
+  const means = keys
+    .map(k => getCaseMetricsByKey(k).mean)
+    .filter(v => v != null);
+  const min = means.length ? Math.min(...means) : 0;
+  const max = means.length ? Math.max(...means) : 0;
+  return { min, max, range: Math.max(1, max - min) };
+}
+
+/**
+ * Peso para elegir el siguiente caso en práctica libre.
+ * - Sin solves: prioridad alta frente a practicados.
+ * - Con solves: sesgo suave hacia los más lentos + menos repetición de mucho vistos.
+ */
+function computeCasePickWeight(key, meanStats) {
   const { count, mean } = getCaseMetricsByKey(key);
-  const meanNorm = mean == null ? 0.5 : Math.max(0, Math.min(1, (mean - meanMin) / meanRange));
-  const speedWeight = 1 + (2.2 * meanNorm);
-  const practiceWeight = 1 + Math.max(0, (10 - count)) / 10;
-  return speedWeight * practiceWeight;
+  if (count === 0) return 12;
+
+  let meanNorm = 0.5;
+  if (mean != null) {
+    meanNorm = Math.max(0, Math.min(1, (mean - meanStats.min) / meanStats.range));
+  }
+  const weaknessBoost = 1 + 0.7 * meanNorm;
+  const lowPracticeBoost = count <= 2 ? 1.2 : (count <= 5 ? 1.08 : 1);
+  const repetitionDampen = 1 / (1 + Math.log1p(count) * 0.38);
+
+  return weaknessBoost * lowPracticeBoost * repetitionDampen;
+}
+
+function scoreWeakness(key, meanMin, meanRange) {
+  return computeCasePickWeight(key, { min: meanMin, max: meanMin + meanRange, range: meanRange });
 }
 
 function rankWeakCaseKeys(keys) {
@@ -552,36 +586,6 @@ function chunkCaseNames(names, size = ALGS_PER_ZBLL_SUBSET) {
   return chunks;
 }
 
-const thumbLoadQueue = { pending: [], active: 0, maxConcurrent: 4 };
-
-function enqueueThumbLoad(img) {
-  if (!img?.dataset?.src || img.dataset.loaded) return;
-  if (!thumbLoadQueue.pending.includes(img)) thumbLoadQueue.pending.push(img);
-  drainThumbLoadQueue();
-}
-
-function drainThumbLoadQueue() {
-  while (thumbLoadQueue.active < thumbLoadQueue.maxConcurrent && thumbLoadQueue.pending.length) {
-    const img = thumbLoadQueue.pending.shift();
-    if (!img.isConnected || !img.dataset.src) continue;
-    thumbLoadQueue.active++;
-    const done = () => {
-      thumbLoadQueue.active--;
-      drainThumbLoadQueue();
-    };
-    img.onload = done;
-    img.onerror = () => { img.remove(); done(); };
-    img.src = img.dataset.src;
-    img.dataset.loaded = '1';
-  }
-}
-
-function loadThumbsInContainer(container) {
-  if (!container) return;
-  container.querySelectorAll('img.acc-case-thumb[data-src]:not([data-loaded])')
-    .forEach(enqueueThumbLoad);
-}
-
 function renderCaseItemHtml(setName, cn, cases) {
   const key  = makeKey(setName, cn);
   const sel  = S.selection.has(key);
@@ -590,10 +594,8 @@ function renderCaseItemHtml(setName, cn, cases) {
   const cid  = `case-chk-${key.replace(/[^a-z0-9]/gi, '-')}`;
   const alg  = cases[cn][0]?.algorithm;
   const difficulty = classifyCaseDifficulty(key);
-  const thumbUrl = alg ? buildVisualCubeUrl(alg, 48) : '';
-  const thumb = thumbUrl
-    ? `<img class="acc-case-thumb" data-src="${esc(thumbUrl)}" alt="" decoding="async" />`
-    : '';
+  const thumbUrl = caseImageUrl(setName, cn);
+  const thumb = `<img class="acc-case-thumb" src="${esc(thumbUrl)}" alt="" loading="lazy" decoding="async" />`;
   const rowTag = studyMode ? 'div' : 'label';
   const rowAttrs = studyMode
     ? `role="button" tabindex="0" aria-label="Abrir ${esc(cn)} para aprender"`
@@ -614,16 +616,6 @@ function renderCaseItemHtml(setName, cn, cases) {
       <span class="acc-case-diff acc-case-diff-${difficulty.cls}">${difficulty.label}</span>
       ${thumb}
     </${rowTag}>`;
-}
-
-/** Case list HTML: flat for H; else Set 1 / Set 2 … (12 cases each, collapsible) */
-function loadThumbsForSet(setEl, setName) {
-  if (!setEl) return;
-  if (SETS_WITHOUT_SUBSETS.has(setName)) {
-    loadThumbsInContainer(setEl.querySelector('.acc-cases'));
-    return;
-  }
-  setEl.querySelectorAll('.acc-subset.open .acc-subset-cases').forEach(loadThumbsInContainer);
 }
 
 function buildAccCasesHtml(setName, allNames, filtered, cases, searchActive = false) {
@@ -703,7 +695,6 @@ function toggleSubset(setName, subsetNum, subsetEl) {
   subsetEl.querySelector('.acc-subset-header')?.setAttribute('aria-expanded', String(!wasOpen));
   if (!wasOpen) {
     S.openSubsets.add(key);
-    loadThumbsInContainer(subsetEl.querySelector('.acc-subset-cases'));
   } else {
     S.openSubsets.delete(key);
   }
@@ -823,8 +814,6 @@ function renderAccordion(filter = '') {
     }
 
     DOM.accordion.appendChild(setEl);
-
-    if (S.openSets.has(setName)) loadThumbsForSet(setEl, setName);
   }
 }
 
@@ -834,12 +823,8 @@ function toggleSet(setName, setEl) {
   setEl.querySelector('.acc-set-header')?.setAttribute('aria-expanded', String(!wasOpen));
   if (!wasOpen) {
     S.openSets.add(setName);
-    loadThumbsForSet(setEl, setName);
   } else {
     S.openSets.delete(setName);
-    thumbLoadQueue.pending = thumbLoadQueue.pending.filter(
-      img => !setEl.contains(img)
-    );
   }
   saveOpenSets();
 }
@@ -869,10 +854,20 @@ function refreshSetHeader(setEl, setName, caseNames) {
 // SCRAMBLE DISPLAY
 // ══════════════════════════════════════════════════════════════
 
+function pickWeighted(pool) {
+  const total = pool.reduce((s, x) => s + x.weight, 0);
+  if (!pool.length) return null;
+  if (total <= 0) return pool[Math.floor(Math.random() * pool.length)];
+  let r = Math.random() * total;
+  for (const item of pool) {
+    r -= item.weight;
+    if (r <= 0) return item;
+  }
+  return pool[pool.length - 1];
+}
+
 /**
- * Pick a random entry with "smart training" weights:
- * - slower cases appear more often
- * - under-practiced cases appear more often
+ * Variante de algoritmo/scramble cómoda para el mismo caso.
  */
 function pickPreferredEntry(entries) {
   if (!entries?.length) return null;
@@ -907,49 +902,22 @@ function pickRandomEntry() {
   }
   if (!casePool.length) return null;
 
-  // Compute per-case mean for normalization (only cases with solves)
-  const means = [];
-  for (const c of casePool) {
-    const rec = S.times[c.key];
-    if (!rec?.times?.length) continue;
-    const avg = rec.times.reduce((s, t) => s + t.time, 0) / rec.times.length;
-    means.push(avg);
-  }
-  const minMean = means.length ? Math.min(...means) : 0;
-  const maxMean = means.length ? Math.max(...means) : 0;
-  const range = Math.max(1, maxMean - minMean);
+  const meanStats = getPracticeMeanStats(activeKeys);
+  const weighted = casePool.map(c => ({
+    ...c,
+    weight: computeCasePickWeight(c.key, meanStats),
+  }));
 
-  // Build weighted distribution
-  const weighted = casePool.map(c => {
-    const rec = S.times[c.key];
-    const n = rec?.times?.length ?? 0;
-    let meanNorm = 0.5; // neutral default for unseen cases
-
-    if (n > 0) {
-      const avg = rec.times.reduce((s, t) => s + t.time, 0) / n;
-      meanNorm = (avg - minMean) / range; // 0 fast .. 1 slow
-    }
-
-    // Harder/slower cases and low-volume practice get a higher chance.
-    const speedWeight = 1 + (2.2 * Math.max(0, Math.min(1, meanNorm)));
-    const practiceWeight = 1 + Math.max(0, (10 - n)) / 10; // boost until 10 solves
-    const weight = speedWeight * practiceWeight;
-
-    return { ...c, weight };
-  });
-
-  const total = weighted.reduce((s, x) => s + x.weight, 0);
-  let r = Math.random() * total;
-  for (const c of weighted) {
-    r -= c.weight;
-    if (r <= 0) {
-      return pickPreferredEntry(c.entries);
-    }
+  const lastKey = S.lastEntry
+    ? makeKey(S.lastEntry.set_name, S.lastEntry.case_name)
+    : null;
+  if (lastKey && weighted.length > 1) {
+    const again = weighted.find(w => w.key === lastKey);
+    if (again) again.weight *= 0.25;
   }
 
-  // Fallback: should not happen, but keep safe behavior.
-  const last = weighted[weighted.length - 1];
-  return pickPreferredEntry(last.entries);
+  const picked = pickWeighted(weighted);
+  return pickPreferredEntry(picked.entries);
 }
 
 /** Wrap each move in a <span> for hover styling */
@@ -1156,7 +1124,7 @@ function showResult(entry, timeMs, isPB) {
   DOM.infoCase.textContent = entry.case_name;
 
   // Case image via visualcube (shown only after solve)
-  loadCaseDiagram(DOM.caseImg, DOM.caseImgFallback, entry.algorithm, 200);
+  loadCaseDiagram(DOM.caseImg, DOM.caseImgFallback, entry.set_name, entry.case_name, entry.algorithm);
 
   // Show section with animation (do not auto-scroll on mobile)
   DOM.resultSection.classList.remove('hidden');
@@ -1258,7 +1226,7 @@ function setAppView(view) {
   const sidebarHint = document.querySelector('.sidebar-hint');
   if (sidebarHint) {
     sidebarHint.textContent = view === 'study'
-      ? 'Abre un set y pulsa un caso para ver algoritmos, imagen y tus notas.'
+      ? 'Abre un set y pulsa un caso para ver algoritmos, imagen y tus notas. Usa «Cerrar» para plegar todo.'
       : 'Abre un set (H, U…) y un bloque (Set 1, Set 2…) para ver los casos. Usa «Cerrar» para plegar todo.';
   }
 
@@ -1284,7 +1252,7 @@ function openStudyCase(key) {
   if (DOM.studySetBadge) DOM.studySetBadge.textContent = set;
   if (DOM.studyCaseName) DOM.studyCaseName.textContent = cas;
 
-  loadCaseDiagram(DOM.studyCaseImg, DOM.studyImgFallback, primaryAlg, 200);
+  loadCaseDiagram(DOM.studyCaseImg, DOM.studyImgFallback, set, cas, primaryAlg);
   renderStudyOfficialAlgs(entries);
 
   const rec = getStudyRecord(key);
@@ -1476,7 +1444,7 @@ function renderStats() {
       const { set, cas } = parseKey(row.key);
       const entries = S.grouped[set]?.[cas] ?? [];
       const primaryAlg = entries[0]?.algorithm ?? '';
-      const imgUrl = primaryAlg ? buildVisualCubeUrl(primaryAlg, 120) : '';
+      const imgUrl = caseImageUrl(set, cas);
 
       tableRows.push(`
         <tr class="details-row" data-key="${esc(row.key)}">
@@ -1484,8 +1452,8 @@ function renderStats() {
             <div class="details-expanded-content">
               
               <div class="details-img-wrap">
-                ${imgUrl 
-                  ? `<img class="details-img" src="${imgUrl}" alt="VisualCube ${esc(row.case)}" />` 
+                ${imgUrl
+                  ? `<img class="details-img" src="${esc(imgUrl)}" alt="${esc(row.case)}" loading="lazy" decoding="async" />`
                   : `<span style="color:var(--text-dim);font-size:0.75rem;">Sin imagen</span>`
                 }
               </div>
@@ -1815,7 +1783,6 @@ function initEvents() {
     showToast('Listas cerradas', 'info');
   };
   DOM.collapseAllBtn?.addEventListener('click', onCollapseAll);
-  DOM.practiceCollapseAllBtn?.addEventListener('click', onCollapseAll);
 
   DOM.filterSlowBtn?.addEventListener('click', () =>
     selectByFilter(m => m.mean != null && m.mean > 2000, '> 2.0s')
