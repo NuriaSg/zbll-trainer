@@ -1738,10 +1738,10 @@ function renderStats() {
                 <div class="details-history-section">
                   <span class="details-section-title">${esc(t('stats.timeHistory', { n: rec.times.length }))}</span>
                   <div class="details-history-list">
-                    ${rec.times.map((t, idx) => `
+                    ${rec.times.map((timeRec, idx) => `
                       <span class="details-history-item">
-                        #${idx + 1}: <span class="details-history-time">${fmtTime(t.time)}</span>
-                        <button type="button" class="btn-delete-time" data-key="${esc(row.key)}" data-ts="${t.ts}" title="${esc(t('stats.deleteTimeTitle'))}" aria-label="${esc(t('stats.deleteTimeAria', { n: idx + 1 }))}">×</button>
+                        #${idx + 1}: <span class="details-history-time">${fmtTime(timeRec.time)}</span>
+                        <button type="button" class="btn-delete-time" data-key="${esc(row.key)}" data-ts="${timeRec.ts}" title="${esc(t('stats.deleteTimeTitle'))}" aria-label="${esc(t('stats.deleteTimeAria', { n: idx + 1 }))}">×</button>
                       </span>
                     `).join('')}
                   </div>
