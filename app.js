@@ -149,6 +149,12 @@ const LS = {
 const MAX_TIMES_PER_CASE = 50;
 const STUDY_OFFICIAL_ALG_PREVIEW = 5;
 const STATS_ALG_PREVIEW = 3;
+/** Caso dominado: último solve o media de los 3 últimos por debajo de 2.2s */
+const DOMINATED_MAX_MS = 2200;
+/** Mezcla válida: sin x/y/z/M/E/S y como máximo 2 wide (r f b…) en minúscula */
+const MAX_WIDE_MOVES = 2;
+const ROTATION_SLICE_MOVE = /^[xyzmse](?:2|')?$/i;
+const WIDE_MOVE = /^[rludfbd](?:2|')?$/;
 
 // ══════════════════════════════════════════════════════════════
 // UTILS
@@ -248,12 +254,18 @@ function copyTextToClipboard(text, okMsg = 'Copiado', errMsg = 'Error al copiar'
   );
 }
 
-/** Una mezcla recomendada por caso (la misma lógica que en Practicar). */
+/** Primera mezcla cómoda del caso (orden en datos); sin rotación aleatoria. */
+function pickFirstAcceptableScrambleEntry(entries) {
+  const pool = uniqueScrambleEntries(filterAcceptableScrambleEntries(entries));
+  return pool[0] ?? null;
+}
+
+/** Mezcla fija en Aprender: primera cómoda del caso. */
 function renderStudyCaseSetup(entries) {
   if (!DOM.studySetupMoves) return;
 
-  const preferred = pickPreferredEntry(entries);
-  const scramble = preferred?.scramble?.trim() ?? '';
+  const chosen = pickFirstAcceptableScrambleEntry(entries);
+  const scramble = chosen?.scramble?.trim() ?? '';
 
   if (!scramble) {
     DOM.studySetupMoves.innerHTML = '<span class="study-setup-empty">Sin mezcla en la base de datos.</span>';
@@ -603,19 +615,22 @@ function classifyCaseDifficulty(key) {
   const recentMean = recent.length
     ? recent.reduce((s, t) => s + t, 0) / recent.length
     : null;
-  const recentSlowCount = recent.filter(t => t > 2500).length;
+  const recentSlowCount = recent.filter(t => t >= DOMINATED_MAX_MS).length;
 
-  // For established data, only mark weak when recent trend is truly slow.
+  if (count >= 3 && recentMean != null && recentMean < DOMINATED_MAX_MS) {
+    return { label: 'dominado', cls: 'strong' };
+  }
+  if (count < 3 && last != null && last < DOMINATED_MAX_MS) {
+    return { label: 'dominado', cls: 'strong' };
+  }
+
   if (count >= 3 && recentSlowCount >= 2) {
     return { label: 'flojo', cls: 'weak' };
   }
-  // For first solves, mark weak only if the most recent solve is above threshold.
-  if (count < 3 && last != null && last > 2500) return { label: 'flojo', cls: 'weak' };
-  if (count < 3) return { label: 'dominado', cls: 'strong' };
-
-  if (recentMean != null && recentMean <= 1800 && count >= 3) {
-    return { label: 'dominado', cls: 'strong' };
+  if (count < 3 && last != null && last >= DOMINATED_MAX_MS) {
+    return { label: 'flojo', cls: 'weak' };
   }
+
   return { label: 'flojo', cls: 'weak' };
 }
 
@@ -934,28 +949,78 @@ function pickWeighted(pool) {
   return pool[pool.length - 1];
 }
 
-/**
- * Variante de algoritmo/scramble cómoda para el mismo caso.
- */
-function pickPreferredEntry(entries) {
+function scrambleMoveStats(sequence) {
+  const moves = sequence?.trim().split(/\s+/).filter(Boolean) ?? [];
+  let wideCount = 0;
+  let hasRotationSlice = false;
+  for (const move of moves) {
+    if (ROTATION_SLICE_MOVE.test(move)) hasRotationSlice = true;
+    if (WIDE_MOVE.test(move)) wideCount += 1;
+  }
+  return { wideCount, hasRotationSlice };
+}
+
+/** Sin giros/slice; como máximo MAX_WIDE_MOVES wide en minúscula (R U F no cuentan). */
+function isScrambleAcceptable(scramble) {
+  const { wideCount, hasRotationSlice } = scrambleMoveStats(scramble);
+  if (hasRotationSlice) return false;
+  if (wideCount > MAX_WIDE_MOVES) return false;
+  return true;
+}
+
+function filterAcceptableScrambleEntries(entries) {
+  if (!entries?.length) return [];
+  const withScramble = entries.filter(e => e.scramble?.trim());
+  const acceptable = withScramble.filter(e => isScrambleAcceptable(e.scramble));
+  if (acceptable.length) return acceptable;
+
+  const noSlice = withScramble.filter(e => !scrambleMoveStats(e.scramble).hasRotationSlice);
+  const pool = noSlice.length ? noSlice : withScramble;
+  const minWide = Math.min(...pool.map(e => scrambleMoveStats(e.scramble).wideCount));
+  return pool.filter(e => scrambleMoveStats(e.scramble).wideCount === minWide);
+}
+
+/** Una entrada por texto de mezcla (evita repetir la misma secuencia) */
+function uniqueScrambleEntries(entries) {
+  const seen = new Set();
+  const out = [];
+  for (const entry of entries) {
+    const sc = entry.scramble?.trim();
+    if (!sc || seen.has(sc)) continue;
+    seen.add(sc);
+    out.push(entry);
+  }
+  return out;
+}
+
+/** Mezcla aleatoria entre variantes válidas del mismo caso */
+function pickRandomScrambleEntry(entries, avoidScramble = null) {
   if (!entries?.length) return null;
-  const hasUncomfortableMoves = s => /(^|\s)[xyzmse](2|'|)(?=\s|$)/i.test(String(s || ''));
 
-  // Prefer a variant without rotations or middle-slice moves.
-  const comfy = entries.find(e => !hasUncomfortableMoves(e.scramble) && !hasUncomfortableMoves(e.algorithm));
-  if (comfy) return comfy;
+  let pool = uniqueScrambleEntries(filterAcceptableScrambleEntries(entries));
+  if (!pool.length) return null;
 
-  // Fallback: first variant for stable, non-random behavior per case.
-  return entries[0];
+  if (avoidScramble) {
+    const avoid = avoidScramble.trim();
+    const other = pool.filter(e => e.scramble?.trim() !== avoid);
+    if (other.length) pool = other;
+  }
+
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function pickRandomEntry() {
+  const currentKey = S.currentEntry
+    ? makeKey(S.currentEntry.set_name, S.currentEntry.case_name)
+    : null;
+  const avoidScramble = S.currentEntry?.scramble?.trim() ?? null;
+
   if (S.forcedNextKey) {
     const key = S.forcedNextKey;
     S.forcedNextKey = null;
     const { set, cas } = parseKey(key);
     const entries = S.grouped[set]?.[cas];
-    return pickPreferredEntry(entries);
+    return pickRandomScrambleEntry(entries, avoidScramble);
   }
 
   const activeKeys = S.session.active
@@ -985,7 +1050,11 @@ function pickRandomEntry() {
   }
 
   const picked = pickWeighted(weighted);
-  return pickPreferredEntry(picked.entries);
+  const sameCase = picked.key === currentKey;
+  const singleCase = activeKeys.length === 1;
+  const avoid = (sameCase || singleCase) ? avoidScramble : null;
+
+  return pickRandomScrambleEntry(picked.entries, avoid);
 }
 
 /** Wrap each move in a <span> for hover styling */
@@ -1045,6 +1114,23 @@ function goNextScramble() {
   }
   if (S.timer.phase === 'READY') setTimerPhase('IDLE');
   hideResult();
+
+  const entry = S.currentEntry;
+  if (entry) {
+    const key = makeKey(entry.set_name, entry.case_name);
+    if (S.selection.has(key)) {
+      const entries = S.grouped[entry.set_name]?.[entry.case_name] ?? [];
+      const pool = uniqueScrambleEntries(filterAcceptableScrambleEntries(entries));
+      if (pool.length > 1) {
+        const next = pickRandomScrambleEntry(entries, entry.scramble?.trim());
+        if (next?.scramble?.trim() !== entry.scramble?.trim()) {
+          displayScramble(next);
+          return;
+        }
+      }
+    }
+  }
+
   displayScramble(pickRandomEntry());
 }
 
