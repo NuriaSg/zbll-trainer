@@ -14598,7 +14598,7 @@
     "id": "Pi_2086",
     "set_name": "Pi",
     "case_name": "Pi3",
-    "scramble": "R U2 R' U' R U' R3' D' R U' R' D R U R",
+    "scramble": "R U2 R' U' R U' R D' R U' R' D R U R",
     "algorithm": "y2 R' U' R' D' R U R' D R3 U R' U R U2 R'"
   },
   {
@@ -17650,7 +17650,7 @@
     "id": "S_2522",
     "set_name": "S",
     "case_name": "S14",
-    "scramble": "R U' R' D R2 U l' U R' U' R U R' U' F'",
+    "scramble": "R' U R U R' U R U2 R' U' R2 D R' U2 R D' R'",
     "algorithm": "y F U R U' R' U R U' l U' R2 D' R U R'"
   },
   {
@@ -17832,7 +17832,7 @@
     "id": "S_2548",
     "set_name": "S",
     "case_name": "S18",
-    "scramble": "D R' U2 R' D2 R U2 R' D2 R2 D'",
+    "scramble": "R U R2' D R2' D' R2' U' R2' D R2' D' R",
     "algorithm": "y x D R2 D2 R U2 R' D2 R U2 R D'"
   },
   {
