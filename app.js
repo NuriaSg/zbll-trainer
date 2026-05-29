@@ -249,11 +249,11 @@ function getUniqueAlgorithmEntries(entries) {
   return out;
 }
 
-function copyTextToClipboard(text, okMsg = 'Copiado', errMsg = 'Error al copiar') {
+function copyTextToClipboard(text, okMsg, errMsg) {
   if (!text) return;
   navigator.clipboard.writeText(text).then(
-    () => showToast(okMsg, 'success'),
-    () => showToast(errMsg, 'error')
+    () => showToast(okMsg ?? t('copy.ok'), 'success'),
+    () => showToast(errMsg ?? t('copy.error'), 'error')
   );
 }
 
@@ -271,7 +271,7 @@ function renderStudyCaseSetup(entries) {
   const scramble = chosen?.scramble?.trim() ?? '';
 
   if (!scramble) {
-    DOM.studySetupMoves.innerHTML = '<span class="study-setup-empty">Sin mezcla en la base de datos.</span>';
+    DOM.studySetupMoves.innerHTML = `<span class="study-setup-empty">${esc(t('study.noSetup'))}</span>`;
     DOM.studySetupCopyBtn?.setAttribute('disabled', 'disabled');
     if (DOM.studySetupCopyBtn) DOM.studySetupCopyBtn.dataset.text = '';
     return;
@@ -291,18 +291,18 @@ function buildCollapsibleAlgsHtml(entries, previewCount, classes) {
   const itemHtml = entry => `
     <div class="${itemCls}">
       <span class="${textCls}">${esc(entry.algorithm)}</span>
-      <button type="button" class="btn-copy" data-text="${esc(entry.algorithm)}">Copiar</button>
+      <button type="button" class="btn-copy" data-text="${esc(entry.algorithm)}">${esc(t('copy'))}</button>
     </div>`;
 
   if (!unique.length) {
-    return `<p class="${emptyCls}">Sin algoritmos en la base de datos.</p>`;
+    return `<p class="${emptyCls}">${esc(t('algs.none'))}</p>`;
   }
 
   let html = visible.map(itemHtml).join('');
   if (hidden.length) {
     html += `
       <button type="button" class="btn btn-ghost btn-sm ${toggleCls}" aria-expanded="false">
-        Ver ${hidden.length} algoritmo${hidden.length !== 1 ? 's' : ''} más
+        ${esc(showMoreAlgsLabel(hidden.length))}
       </button>
       <div class="${moreCls} hidden">
         ${hidden.map(itemHtml).join('')}
@@ -321,8 +321,8 @@ function bindCollapsibleAlgs(container) {
       const collapsed = more.classList.toggle('hidden');
       toggle.setAttribute('aria-expanded', String(!collapsed));
       toggle.textContent = collapsed
-        ? `Ver ${hiddenCount} algoritmo${hiddenCount !== 1 ? 's' : ''} más`
-        : 'Ocultar algoritmos extra';
+        ? showMoreAlgsLabel(hiddenCount)
+        : t('algs.hideExtra');
     });
   });
 }
@@ -340,7 +340,7 @@ function renderStudyOfficialAlgs(entries) {
 
   bindCollapsibleAlgs(DOM.studyOfficialAlgs);
   DOM.studyOfficialAlgs.querySelectorAll('.btn-copy').forEach(btn => {
-    btn.addEventListener('click', () => copyTextToClipboard(btn.dataset.text, 'Algoritmo copiado'));
+    btn.addEventListener('click', () => copyTextToClipboard(btn.dataset.text, t('copy.alg')));
   });
 }
 
@@ -452,7 +452,7 @@ function showConfirm(title, body, onOk) {
 // DATA LOADING
 // ══════════════════════════════════════════════════════════════
 async function loadData() {
-  DOM.scrambleMoves.innerHTML = '<span class="scramble-placeholder">Cargando casos…</span>';
+  DOM.scrambleMoves.innerHTML = `<span class="scramble-placeholder">${esc(t('practice.loading'))}</span>`;
   try {
     const resp = await fetch('./zbll_cases.json');
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -460,8 +460,8 @@ async function loadData() {
     groupCases();
   } catch (err) {
     console.error('Failed to load zbll_cases.json:', err);
-    showToast('Error cargando los algoritmos: ' + err.message, 'error', 8000);
-    DOM.scrambleMoves.innerHTML = '<span class="scramble-placeholder">Error al cargar datos</span>';
+    showToast(t('toast.loadError', { msg: err.message }), 'error', 8000);
+    DOM.scrambleMoves.innerHTML = `<span class="scramble-placeholder">${esc(t('practice.loadError'))}</span>`;
   }
 }
 
@@ -559,7 +559,7 @@ function getSelectedEntries() {
 
 function updateSelectionBadge() {
   const n = S.selection.size;
-  DOM.selectedBadge.textContent = n === 0 ? '0 casos' : `${n} caso${n !== 1 ? 's' : ''}`;
+  DOM.selectedBadge.textContent = formatSelectedCases(n);
   DOM.selectedBadge.classList.toggle('active', n > 0);
 }
 
@@ -671,7 +671,7 @@ function updateSessionStatus() {
     return;
   }
   DOM.sessionStatus.classList.remove('hidden');
-  DOM.sessionStatus.textContent = `Sesión ${S.session.done}/${S.session.target}`;
+  DOM.sessionStatus.textContent = t('session.label', { done: S.session.done, target: S.session.target });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -699,7 +699,7 @@ function renderCaseItemHtml(setName, cn, cases) {
   const thumb = `<img class="acc-case-thumb" src="${esc(thumbUrl)}" alt="" loading="lazy" decoding="async" />`;
   const rowTag = studyMode ? 'div' : 'label';
   const rowAttrs = studyMode
-    ? `role="button" tabindex="0" aria-label="Abrir ${esc(cn)} para aprender"`
+    ? `role="button" tabindex="0" aria-label="${esc(t('acc.openLearn', { case: cn }))}"`
     : `for="${cid}"`;
   const rowClass = `acc-case-item${!studyMode && sel ? ' selected' : ''}${studyActive ? ' study-active' : ''}`;
   const checkboxHtml = studyMode ? '' : `
@@ -714,7 +714,7 @@ function renderCaseItemHtml(setName, cn, cases) {
   return `
     <${rowTag} class="${rowClass}" data-key="${esc(key)}" ${rowAttrs}>${checkboxHtml}
       <span class="acc-case-name">${esc(cn)}</span>
-      <span class="acc-case-diff acc-case-diff-${difficulty.cls}">${difficulty.label}</span>
+      <span class="acc-case-diff acc-case-diff-${difficulty.cls}">${esc(diffLabel(difficulty.cls))}</span>
       ${thumb}
     </${rowTag}>`;
 }
@@ -743,7 +743,7 @@ function buildAccCasesHtml(setName, allNames, filtered, cases, searchActive = fa
               id="${subsetId}"
               data-set="${esc(setName)}"
               data-cases="${esc(visible.join(','))}"
-              aria-label="Seleccionar Set ${subsetNum} del set ${setName}"
+              aria-label="${esc(t('acc.selectSubset', { n: subsetNum, set: setName }))}"
               ${allChunkSel ? 'checked' : ''}
             />`;
       const subsetBadge = studyMode ? String(visible.length) : `${selInChunk}/${visible.length}`;
@@ -751,7 +751,7 @@ function buildAccCasesHtml(setName, allNames, filtered, cases, searchActive = fa
         <div class="acc-subset${subsetOpen ? ' open' : ''}" data-subset="${subsetNum}">
           <div class="acc-subset-header" role="button" tabindex="0" aria-expanded="${subsetOpen}">
             <span class="acc-toggle-icon" aria-hidden="true">▶</span>${subsetCheckHtml}
-            <span class="acc-subset-label">Set ${subsetNum}</span>
+            <span class="acc-subset-label">${esc(t('acc.subset', { n: subsetNum }))}</span>
             <span class="acc-subset-badge">${subsetBadge}</span>
           </div>
           <div class="acc-subset-cases">
@@ -833,7 +833,7 @@ function renderAccordion(filter = '') {
           type="checkbox"
           class="acc-set-check"
           id="set-chk-${setName}"
-          aria-label="Seleccionar todos los casos del set ${setName}"
+          aria-label="${esc(t('acc.selectSet', { set: setName }))}"
           ${allSel ? 'checked' : ''}
         />`;
     const setNameHtml = studyMode
@@ -1106,9 +1106,9 @@ function displayScramble(entry) {
   S.currentEntry = entry;
 
   if (!entry) {
-    DOM.scrambleMoves.innerHTML = '<span class="scramble-placeholder">Selecciona al menos un caso →</span>';
+    DOM.scrambleMoves.innerHTML = `<span class="scramble-placeholder">${esc(t('practice.selectCasesArrow'))}</span>`;
     DOM.infoSet.textContent     = '—';
-    DOM.infoCase.textContent    = 'Sin casos seleccionados';
+    DOM.infoCase.textContent    = t('practice.noCases');
     DOM.infoAlgCount.textContent = '';
     DOM.nextScrambleBtn?.setAttribute('disabled', 'disabled');
     return;
@@ -1146,11 +1146,11 @@ function isTimerKeyboardBlocked() {
 
 function goNextScramble() {
   if (S.selection.size === 0) {
-    showToast('Selecciona al menos un caso para practicar', 'error');
+    showToast(t('toast.selectCases'), 'error');
     return;
   }
   if (S.timer.phase === 'RUNNING') {
-    showToast('Para el cronómetro antes de cambiar de scramble', 'info');
+    showToast(t('toast.stopTimer'), 'info');
     return;
   }
   if (S.timer.phase === 'READY') setTimerPhase('IDLE');
@@ -1179,18 +1179,18 @@ function repeatLastCase() {
   const key = DOM.repeatWeakBtn?.dataset.key
     || (S.lastEntry ? makeKey(S.lastEntry.set_name, S.lastEntry.case_name) : null);
   if (!key) {
-    showToast('Resuelve un caso antes de repetir', 'info');
+    showToast(t('toast.solveFirst'), 'info');
     return;
   }
   if (S.timer.phase === 'RUNNING') {
-    showToast('Para el cronómetro antes de cambiar de scramble', 'info');
+    showToast(t('toast.stopTimer'), 'info');
     return;
   }
   if (S.timer.phase === 'READY') setTimerPhase('IDLE');
   S.forcedNextKey = key;
   hideResult();
   displayScramble(pickRandomEntry());
-  showToast('Caso fijado para repetir', 'info');
+  showToast(t('toast.casePinned'), 'info');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1208,14 +1208,14 @@ function setTimerPhase(phase) {
 
   switch (phase) {
     case 'IDLE':
-      DOM.timerHint.innerHTML = 'Mantén <kbd>ESPACIO</kbd> o <kbd>toca</kbd> para preparar · <kbd>N</kbd> nuevo · <kbd>R</kbd> repetir';
+      DOM.timerHint.innerHTML = t('timer.idle');
       break;
     case 'READY':
-      DOM.timerHint.textContent = '¡Suelta para empezar!';
+      DOM.timerHint.textContent = t('timer.ready');
       DOM.timerValue.textContent = '0.000';
       break;
     case 'RUNNING':
-      DOM.timerHint.textContent = 'Pulsa para parar';
+      DOM.timerHint.textContent = t('timer.running');
       break;
   }
 }
@@ -1230,7 +1230,7 @@ function onPress(e) {
 
   if (phase === 'IDLE') {
     if (!S.currentEntry) {
-      showToast('Selecciona al menos un caso para practicar', 'error');
+      showToast(t('toast.selectCases'), 'error');
       return;
     }
     hideResult();
@@ -1291,7 +1291,7 @@ function stopTimer() {
       if (S.session.done >= S.session.target) {
         const avg = S.session.times.reduce((s, t) => s + t, 0) / S.session.times.length;
         const best = Math.min(...S.session.times);
-        showToast(`Sesión completa: media ${fmtTime(avg)}, mejor ${fmtTime(best)}`, 'success', 7000);
+        showToast(t('toast.sessionComplete', { avg: fmtTime(avg), best: fmtTime(best) }), 'success', 7000);
         S.session.active = false;
         S.session.done = 0;
         S.session.times = [];
@@ -1395,7 +1395,7 @@ function scheduleStudySave() {
     rec.notes    = DOM.studyNotesInput?.value ?? '';
     rec.updatedAt = Date.now();
     saveStudy();
-    if (DOM.studySaveHint) DOM.studySaveHint.textContent = 'Guardado ✓';
+    if (DOM.studySaveHint) DOM.studySaveHint.textContent = t('study.saved');
     refreshStudyPersonalUI();
   }, 400);
 }
@@ -1425,8 +1425,8 @@ function setAppView(view) {
 
   if (DOM.sidebarTitle) {
     DOM.sidebarTitle.textContent = view === 'study'
-      ? 'Casos para aprender'
-      : 'Selección de Casos';
+      ? t('sidebar.titleStudy')
+      : t('sidebar.title');
   }
 
   if (view === 'stats') {
@@ -1438,8 +1438,8 @@ function setAppView(view) {
   const sidebarHint = document.querySelector('.sidebar-hint');
   if (sidebarHint) {
     sidebarHint.textContent = view === 'study'
-      ? 'Abre un set y pulsa un caso para ver algoritmos, imagen y tus notas. Usa «Cerrar» para plegar todo.'
-      : 'Abre un set (H, U…) y un bloque (Set 1, Set 2…) para ver los casos. Usa «Cerrar» para plegar todo.';
+      ? t('sidebar.hintStudy')
+      : t('sidebar.hint');
   }
 
   if (view === 'study' || view === 'practice') {
@@ -1472,7 +1472,7 @@ function openStudyCase(key, { scroll = true } = {}) {
   if (DOM.studyAlgInput) DOM.studyAlgInput.value = rec.studyAlg ?? '';
   if (DOM.studyNotesInput) DOM.studyNotesInput.value = rec.notes ?? '';
   refreshStudyPersonalUI();
-  if (DOM.studySaveHint) DOM.studySaveHint.textContent = 'Los cambios se guardan automáticamente en este dispositivo.';
+  if (DOM.studySaveHint) DOM.studySaveHint.textContent = t('study.saveHint');
 
   const keys = getSortedCaseKeys();
   const idx = keys.indexOf(key);
@@ -1514,7 +1514,7 @@ function practiceStudyCaseOnly() {
   document.body.classList.remove('sidebar-open');
   DOM.sidebarToggle?.setAttribute('aria-expanded', 'false');
   renderAccordion(DOM.caseSearch?.value ?? '');
-  showToast('Practicando solo este caso', 'info');
+  showToast(t('toast.practiceOnly'), 'info');
 }
 
 /** Record a time; returns { isPB, ts } for the new entry */
@@ -1554,12 +1554,12 @@ function deleteTimeRecord(key, ts) {
 function discardLastRecordedTime() {
   const last = S.lastRecorded;
   if (!last?.key || last.ts == null) {
-    showToast('No hay un tiempo reciente que descartar', 'info');
+    showToast(t('toast.noDiscard'), 'info');
     return;
   }
 
   if (!deleteTimeRecord(last.key, last.ts)) {
-    showToast('No se pudo eliminar el tiempo', 'error');
+    showToast(t('toast.discardFail'), 'error');
     return;
   }
 
@@ -1576,7 +1576,7 @@ function discardLastRecordedTime() {
   hideResult();
   renderStats();
   renderAccordion(DOM.caseSearch?.value ?? '');
-  showToast('Tiempo descartado', 'success');
+  showToast(t('toast.discarded'), 'success');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1612,6 +1612,19 @@ function computeStats(timesArr) {
 // ══════════════════════════════════════════════════════════════
 // STATS TABLE RENDER
 // ══════════════════════════════════════════════════════════════
+function rebuildStatsFilterOptions() {
+  if (!DOM.statsSetFilter || !DOM.statsLevelFilter) return;
+  const setVal = DOM.statsSetFilter.value || 'all';
+  const levelVal = DOM.statsLevelFilter.value || 'all';
+
+  DOM.statsLevelFilter.innerHTML = `
+    <option value="all">${esc(t('stats.allLevels'))}</option>
+    <option value="weak">${esc(t('stats.onlyWeak'))}</option>
+    <option value="strong">${esc(t('stats.onlyStrong'))}</option>
+  `;
+  DOM.statsLevelFilter.value = levelVal;
+}
+
 function renderStats() {
   const keys = Object.keys(S.times);
 
@@ -1637,7 +1650,7 @@ function renderStats() {
   if (DOM.statsSetFilter) {
     const prev = DOM.statsSetFilter.value || 'all';
     const setVals = [...new Set(rows.map(r => r.set))].sort();
-    DOM.statsSetFilter.innerHTML = `<option value="all">Todos los sets</option>${setVals.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}`;
+    DOM.statsSetFilter.innerHTML = `<option value="all">${esc(t('stats.allSets'))}</option>${setVals.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}`;
     DOM.statsSetFilter.value = setVals.includes(prev) ? prev : 'all';
   }
 
@@ -1685,12 +1698,12 @@ function renderStats() {
         <td>
           <div style="display: flex; gap: 6px;">
             <button class="row-details-btn btn-sm btn-outline" data-key="${esc(row.key)}"
-              aria-label="Ver detalles de ${esc(row.case)}">
-              ${isExpanded ? '▲ Cerrar' : '🔍 Detalles'}
+              aria-label="${esc(t('confirm.detailsCase', { case: row.case }))}">
+              ${isExpanded ? esc(t('stats.close')) : esc(t('stats.details'))}
             </button>
             <button class="row-delete-btn btn-sm btn-danger" data-key="${esc(row.key)}"
-              aria-label="Borrar tiempos de ${esc(row.case)}">
-              🗑 Borrar
+              aria-label="${esc(t('confirm.deleteCaseTimes', { case: row.case }))}">
+              ${esc(t('stats.delete'))}
             </button>
           </div>
         </td>
@@ -1712,23 +1725,23 @@ function renderStats() {
               <div class="details-img-wrap">
                 ${imgUrl
                   ? `<img class="details-img" src="${esc(imgUrl)}" alt="${esc(row.case)}" loading="lazy" decoding="async" />`
-                  : `<span style="color:var(--text-dim);font-size:0.75rem;">Sin imagen</span>`
+                  : `<span style="color:var(--text-dim);font-size:0.75rem;">${esc(t('stats.noImage'))}</span>`
                 }
               </div>
 
               <div class="details-info">
                 <div class="details-algs-section" data-stats-algs>
-                  <span class="details-section-title">Algoritmos disponibles</span>
+                  <span class="details-section-title">${esc(t('stats.availableAlgs'))}</span>
                   ${buildStatsAlgsHtml(entries)}
                 </div>
 
                 <div class="details-history-section">
-                  <span class="details-section-title">Historial de Tiempos (${rec.times.length})</span>
+                  <span class="details-section-title">${esc(t('stats.timeHistory', { n: rec.times.length }))}</span>
                   <div class="details-history-list">
                     ${rec.times.map((t, idx) => `
                       <span class="details-history-item">
                         #${idx + 1}: <span class="details-history-time">${fmtTime(t.time)}</span>
-                        <button type="button" class="btn-delete-time" data-key="${esc(row.key)}" data-ts="${t.ts}" title="Borrar este tiempo" aria-label="Borrar tiempo ${idx + 1}">×</button>
+                        <button type="button" class="btn-delete-time" data-key="${esc(row.key)}" data-ts="${t.ts}" title="${esc(t('stats.deleteTimeTitle'))}" aria-label="${esc(t('stats.deleteTimeAria', { n: idx + 1 }))}">×</button>
                       </span>
                     `).join('')}
                   </div>
@@ -1762,9 +1775,9 @@ function renderStats() {
     btn.addEventListener('click', () => {
       const text = btn.dataset.text;
       navigator.clipboard.writeText(text).then(() => {
-        showToast('Algoritmo copiado al portapapeles', 'success');
+        showToast(t('copy.algClipboard'), 'success');
       }).catch(() => {
-        showToast('Error al copiar algoritmo', 'error');
+        showToast(t('copy.algError'), 'error');
       });
     });
   });
@@ -1780,7 +1793,7 @@ function renderStats() {
         }
         renderStats();
         renderAccordion(DOM.caseSearch.value);
-        showToast('Tiempo eliminado', 'success');
+        showToast(t('toast.timeDeleted'), 'success');
       }
     });
   });
@@ -1791,15 +1804,15 @@ function renderStats() {
       const key        = btn.dataset.key;
       const { set, cas } = parseKey(key);
       showConfirm(
-        '¿Borrar tiempos?',
-        `Se eliminarán todos los tiempos de "${cas}" (set ${set}). Esta acción no se puede deshacer.`,
+        t('confirm.deleteTimes'),
+        t('confirm.deleteTimesBody', { case: cas, set }),
         () => { 
           delete S.times[key]; 
           if (S.expandedKey === key) S.expandedKey = null;
           saveTimes(); 
           renderStats(); 
           renderAccordion(DOM.caseSearch.value);
-          showToast('Tiempos eliminados', 'success'); 
+          showToast(t('toast.timesDeleted'), 'success'); 
         }
       );
     });
@@ -1831,15 +1844,15 @@ function renderSummaryCards(keys) {
 
   DOM.statsSummary.innerHTML = `
     <div class="summary-card">
-      <span class="summary-card-label">Total Resoluciones</span>
+      <span class="summary-card-label">${esc(t('stats.summarySolves'))}</span>
       <span class="summary-card-value accent">${totalSolves}</span>
     </div>
     <div class="summary-card">
-      <span class="summary-card-label">Casos Practicados</span>
+      <span class="summary-card-label">${esc(t('stats.summaryCases'))}</span>
       <span class="summary-card-value">${keys.length}</span>
     </div>
     <div class="summary-card">
-      <span class="summary-card-label">Media Global</span>
+      <span class="summary-card-label">${esc(t('stats.summaryMean'))}</span>
       <span class="summary-card-value">${globalMean != null ? fmtTime(globalMean) : '—'}</span>
     </div>
   `;
@@ -1853,7 +1866,7 @@ function exportStats() {
   const hasTimes = Object.keys(S.times).length > 0;
   const hasStudy = Object.keys(S.study).length > 0;
   if (!hasTimes && !hasStudy) {
-    showToast('No hay datos que exportar', 'info');
+    showToast(t('toast.noExport'), 'info');
     return;
   }
   const payload = {
@@ -1872,7 +1885,7 @@ function exportStats() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showToast('Estadísticas exportadas correctamente', 'success');
+  showToast(t('toast.exportOk'), 'success');
 }
 
 function importStats(file) {
@@ -1911,9 +1924,9 @@ function importStats(file) {
       saveTimes();
       renderStats();
       renderAccordion(DOM.caseSearch.value);
-      showToast(`Importado: ${added} casos nuevos, ${merged} tiempos fusionados`, 'success');
+      showToast(t('toast.importOk', { added, merged }), 'success');
     } catch (err) {
-      showToast('Error al importar: archivo no válido', 'error');
+      showToast(t('toast.importError'), 'error');
     } finally {
       DOM.importFile.value = '';
     }
@@ -1926,19 +1939,19 @@ function selectByFilter(predicate, label) {
   S.selection = new Set(keys);
   onSelectionChange();
   renderAccordion(DOM.caseSearch.value);
-  showToast(`Filtro "${label}": ${keys.length} casos`, 'info');
+  showToast(t('toast.filter', { label, n: keys.length }), 'info');
 }
 
 function startWeakSession(target = 15) {
   const sourceKeys = [...S.selection];
   if (!sourceKeys.length) {
-    showToast('Selecciona casos primero para iniciar la sesión', 'error');
+    showToast(t('toast.sessionSelectFirst'), 'error');
     return;
   }
 
   const practicedKeys = sourceKeys.filter(key => getCaseMetricsByKey(key).count > 0);
   if (practicedKeys.length < target) {
-    showToast(`Necesitas al menos ${target} casos ya practicados entre los seleccionados`, 'error', 4500);
+    showToast(t('toast.sessionNeedCases', { n: target }), 'error', 4500);
     return;
   }
 
@@ -1951,7 +1964,7 @@ function startWeakSession(target = 15) {
   resetPracticeDistributionMemory();
   updateSessionStatus();
   displayScramble(pickRandomEntry());
-  showToast(`Sesión iniciada: ${target} casos flojos`, 'success');
+  showToast(t('toast.sessionStart', { n: target }), 'success');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1984,7 +1997,7 @@ function initPWA() {
     if (outcome === 'accepted') {
       DOM.installBtn.style.display = 'none';
       S.installPrompt = null;
-      showToast('¡App instalada! Ya puedes usarla offline', 'success');
+      showToast(t('toast.installed'), 'success');
     }
   });
 
@@ -2022,41 +2035,45 @@ function initEvents() {
         S.selection.add(makeKey(setName, cn));
     onSelectionChange();
     renderAccordion(DOM.caseSearch.value);
-    showToast('Todos los casos seleccionados', 'success');
+    showToast(t('toast.allSelected'), 'success');
   });
 
   DOM.deselectAllBtn.addEventListener('click', () => {
     S.selection.clear();
     onSelectionChange();
     renderAccordion(DOM.caseSearch.value);
-    showToast('Selección limpiada', 'info');
+    showToast(t('toast.selectionCleared'), 'info');
   });
 
   const onCollapseAll = () => {
     collapseAllAccordion();
-    showToast('Listas cerradas', 'info');
+    showToast(t('toast.listsClosed'), 'info');
   };
   DOM.collapseAllBtn?.addEventListener('click', onCollapseAll);
 
   DOM.filterSlowBtn?.addEventListener('click', () =>
-    selectByFilter(m => m.mean != null && m.mean > 2000, '> 2.0s')
+    selectByFilter(m => m.mean != null && m.mean > 2000, t('filter.slow'))
   );
   DOM.filterLowBtn?.addEventListener('click', () =>
-    selectByFilter(m => m.count > 0 && m.count < 10, '< 10 solves')
+    selectByFilter(m => m.count > 0 && m.count < 10, t('filter.low'))
   );
   DOM.filterUnseenBtn?.addEventListener('click', () =>
-    selectByFilter(m => m.count === 0, 'sin practicar')
+    selectByFilter(m => m.count === 0, t('filter.unseen'))
   );
   DOM.discardLastTimeBtn?.addEventListener('click', discardLastRecordedTime);
   DOM.repeatWeakBtn?.addEventListener('click', repeatLastCase);
   DOM.openStudyBtn?.addEventListener('click', () => openStudyFromKey(DOM.openStudyBtn.dataset.key));
   DOM.nextScrambleBtn?.addEventListener('click', goNextScramble);
   DOM.copySetupBtn?.addEventListener('click', () =>
-    copyTextToClipboard(DOM.copySetupBtn?.dataset.text, 'Mezcla copiada')
+    copyTextToClipboard(DOM.copySetupBtn?.dataset.text, t('copy.setup'))
   );
   DOM.studySetupCopyBtn?.addEventListener('click', () =>
-    copyTextToClipboard(DOM.studySetupCopyBtn?.dataset.text, 'Mezcla copiada')
+    copyTextToClipboard(DOM.studySetupCopyBtn?.dataset.text, t('copy.setup'))
   );
+
+  document.querySelectorAll('[data-lang-btn]').forEach(btn => {
+    btn.addEventListener('click', () => setLocale(btn.dataset.langBtn));
+  });
 
   // ── App navigation ─────────────────────────────────────────
   DOM.navBtns?.forEach(btn => {
@@ -2207,9 +2224,9 @@ function initEvents() {
   // ── Clear all stats ───────────────────────────────────────
   DOM.clearBtn.addEventListener('click', () => {
     showConfirm(
-      '¿Borrar todas las estadísticas?',
-      'Esta acción eliminará TODOS los tiempos registrados de TODOS los casos. No se puede deshacer.',
-      () => { S.times = {}; saveTimes(); renderStats(); renderAccordion(DOM.caseSearch.value); showToast('Estadísticas eliminadas', 'success'); }
+      t('confirm.clearAll'),
+      t('confirm.clearAllBody'),
+      () => { S.times = {}; saveTimes(); renderStats(); renderAccordion(DOM.caseSearch.value); showToast(t('toast.statsCleared'), 'success'); }
     );
   });
 }
@@ -2217,7 +2234,52 @@ function initEvents() {
 // ══════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════
+function refreshAppLanguage() {
+  applyStaticI18n();
+  updateDocumentMeta();
+  updateSelectionBadge();
+  updateSessionStatus();
+  setTimerPhase(S.timer.phase);
+  rebuildStatsFilterOptions();
+
+  if (DOM.sidebarTitle) {
+    DOM.sidebarTitle.textContent = S.appView === 'study'
+      ? t('sidebar.titleStudy')
+      : t('sidebar.title');
+  }
+  const sidebarHint = document.querySelector('.sidebar-hint');
+  if (sidebarHint) {
+    sidebarHint.textContent = S.appView === 'study'
+      ? t('sidebar.hintStudy')
+      : t('sidebar.hint');
+  }
+
+  renderAccordion(DOM.caseSearch?.value ?? '');
+  renderStats();
+
+  if (S.studyCurrentKey && S.appView === 'study') {
+    const { set, cas } = parseKey(S.studyCurrentKey);
+    const entries = S.grouped[set]?.[cas];
+    if (entries?.length) {
+      renderStudyCaseSetup(entries);
+      renderStudyOfficialAlgs(entries);
+    }
+    if (DOM.studySaveHint && !S.studyEditingAlg && !S.studyEditingNotes) {
+      DOM.studySaveHint.textContent = t('study.saveHint');
+    }
+    refreshStudyPersonalUI();
+  }
+
+  if (S.currentEntry) {
+    displayScramble(S.currentEntry);
+  } else if (S.selection.size === 0) {
+    displayScramble(null);
+  }
+}
+window.refreshAppLanguage = refreshAppLanguage;
+
 async function init() {
+  initI18n();
   // Restore persisted state
   loadSelection();
   loadOpenSets();
@@ -2247,7 +2309,7 @@ async function init() {
   displayScramble(first);
 
   if (S.selection.size === 0) {
-    showToast('Selecciona casos en el panel izquierdo para empezar', 'info', 5000);
+    showToast(t('toast.selectSidebar'), 'info', 5000);
   }
 
   // Set initial timer phase

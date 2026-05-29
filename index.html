@@ -3,32 +3,68 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="Aplicación PWA para practicar los algoritmos ZBLL del cubo de Rubik 3×3. Funciona 100% offline con cronómetro instantáneo y estadísticas." />
+  <meta name="description" content="ZBLL Trainer para aprender ZBLL en 3x3 y también en inglés como ZBLL trainer for 3x3. Práctica con cronómetro, modo aprender, estadísticas y uso offline." />
+  <meta name="keywords" content="aprender ZBLL, ZBLL trainer, ZBLL 3x3, learn ZBLL, 3x3 ZBLL trainer, ZBLL algorithms, Rubik's cube ZBLL" />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <link rel="canonical" href="https://zblltrainer.com/" />
+  <link rel="alternate" hreflang="es" href="https://zblltrainer.com/" />
+  <link rel="alternate" hreflang="en" href="https://zblltrainer.com/en.html" />
+  <link rel="alternate" hreflang="x-default" href="https://zblltrainer.com/" />
+
+  <meta property="og:locale" content="es_ES" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="ZBLL Trainer" />
+  <meta property="og:title" content="ZBLL Trainer - Aprende y practica ZBLL 3x3" />
+  <meta property="og:description" content="Entrena ZBLL del cubo 3x3 con scrambles filtrados, cronómetro instantáneo, modo aprender y estadísticas." />
+  <meta property="og:url" content="https://zblltrainer.com/" />
+  <meta property="og:image" content="https://zblltrainer.com/icon-512.png" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="ZBLL Trainer - Aprende y practica ZBLL 3x3" />
+  <meta name="twitter:description" content="App para aprender ZBLL y entrenar casos ZBLL 3x3 con timer, estadísticas y modo offline." />
+  <meta name="twitter:image" content="https://zblltrainer.com/icon-512.png" />
   <meta name="theme-color" content="#0d1b3e" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="ZBLL Trainer" />
 
-  <title>ZBLL Trainer — Cubo de Rubik 3×3</title>
+  <title>ZBLL Trainer - Aprende ZBLL 3x3 y entrena casos</title>
 
-  <!-- PWA Manifest -->
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" href="icon-512.png" />
   <link rel="apple-touch-icon" href="icon-512.png" />
 
-  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="styles.css" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ZBLL Trainer",
+    "applicationCategory": "GameApplication",
+    "operatingSystem": "Web",
+    "inLanguage": ["es", "en"],
+    "url": "https://zblltrainer.com/",
+    "description": "Aplicación web para aprender ZBLL y practicar casos ZBLL en cubo 3x3 con cronómetro, estadísticas y modo offline.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "EUR"
+    },
+    "keywords": "aprender ZBLL, ZBLL trainer, ZBLL 3x3, learn ZBLL, 3x3 ZBLL trainer"
+  }
+  </script>
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════════════ HEADER ══ -->
   <header id="app-header" class="app-header">
     <div class="header-inner">
-      <button id="sidebar-toggle" class="icon-btn" aria-label="Abrir/cerrar selector de casos" aria-expanded="false">
+      <button id="sidebar-toggle" class="icon-btn" data-i18n-aria="header.toggleSidebar" aria-expanded="false">
         <span class="hamburger" aria-hidden="true">
           <span></span><span></span><span></span>
         </span>
@@ -40,113 +76,120 @@
       </div>
 
       <div class="header-actions">
-        <div id="selected-count-badge" class="badge" title="Casos seleccionados">0 casos</div>
-        <button id="install-btn" class="btn btn-accent btn-sm" style="display:none" aria-label="Instalar aplicación">
-          ⬇ Instalar
+        <div class="lang-switch" role="group" data-i18n-aria="header.langSwitch">
+          <button type="button" class="lang-btn" data-lang-btn="es" aria-pressed="true">ES</button>
+          <button type="button" class="lang-btn" data-lang-btn="en" aria-pressed="false">EN</button>
+        </div>
+        <div id="selected-count-badge" class="badge" data-i18n-title="header.selectedCases">0 casos</div>
+        <button id="install-btn" class="btn btn-accent btn-sm" style="display:none" data-i18n-aria="header.installApp">
+          <span data-i18n="header.install">Instalar</span>
         </button>
       </div>
     </div>
   </header>
 
   <div class="app-shell">
-  <nav class="app-nav" aria-label="Secciones de la aplicación">
+  <nav class="app-nav" data-i18n-aria="nav.sections">
     <div class="app-nav-inner">
-      <button type="button" class="app-nav-btn active" data-view="practice" aria-current="page">Practicar</button>
-      <button type="button" class="app-nav-btn" data-view="study">Aprender</button>
-      <button type="button" class="app-nav-btn" data-view="stats">Estadísticas</button>
+      <button type="button" class="app-nav-btn active" data-view="practice" aria-current="page" data-i18n="nav.practice">Practicar</button>
+      <button type="button" class="app-nav-btn" data-view="study" data-i18n="nav.study">Aprender</button>
+      <button type="button" class="app-nav-btn" data-view="stats" data-i18n="nav.stats">Estadísticas</button>
     </div>
   </nav>
 
-  <!-- ═══════════════════════════════════════════ APP LAYOUT ══ -->
   <div class="app-layout">
 
-    <!-- Mobile overlay -->
     <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
 
-    <!-- ════════════════════════════════════════════ SIDEBAR ══ -->
-    <aside id="sidebar" class="sidebar" aria-label="Selector de casos ZBLL">
+    <aside id="sidebar" class="sidebar" data-i18n-aria="sidebar.casesLabel">
       <div class="sidebar-head">
-        <h2 id="sidebar-title" class="sidebar-title">Selección de Casos</h2>
+        <h2 id="sidebar-title" class="sidebar-title" data-i18n="sidebar.title">Selección de Casos</h2>
         <div class="sidebar-bulk-actions">
-          <button id="select-all-btn" class="btn btn-sm btn-outline">Todo</button>
-          <button id="deselect-all-btn" class="btn btn-sm btn-ghost">Ninguno</button>
-          <button id="collapse-all-btn" class="btn btn-sm btn-ghost" title="Cerrar todos los sets y bloques">Cerrar</button>
+          <button id="select-all-btn" class="btn btn-sm btn-outline" data-i18n="sidebar.selectAll">Todo</button>
+          <button id="deselect-all-btn" class="btn btn-sm btn-ghost" data-i18n="sidebar.deselectAll">Ninguno</button>
+          <button id="collapse-all-btn" class="btn btn-sm btn-ghost" data-i18n="sidebar.collapseAll" data-i18n-title="sidebar.collapseAllTitle">Cerrar</button>
         </div>
       </div>
 
       <div class="sidebar-search">
-        <input type="search" id="case-search" class="search-input" placeholder="Buscar caso…" autocomplete="off" />
+        <input type="search" id="case-search" class="search-input" data-i18n-placeholder="sidebar.search" placeholder="Buscar caso…" autocomplete="off" />
       </div>
 
-      <div class="sidebar-train-tools" aria-label="Herramientas de entrenamiento">
-        <button id="filter-slow-btn" class="btn btn-sm btn-ghost" title="Casos con media mayor de 2.0s">&gt; 2.0s</button>
-        <button id="filter-low-btn" class="btn btn-sm btn-ghost" title="Casos con menos de 10 resoluciones">&lt; 10</button>
-        <button id="filter-unseen-btn" class="btn btn-sm btn-ghost" title="Casos sin practicar">Sin practicar</button>
+      <div class="sidebar-train-tools" data-i18n-aria="sidebar.trainTools">
+        <button id="filter-slow-btn" class="btn btn-sm btn-ghost" data-i18n-title="sidebar.filterSlowTitle">&gt; 2.0s</button>
+        <button id="filter-low-btn" class="btn btn-sm btn-ghost" data-i18n-title="sidebar.filterLowTitle">&lt; 10</button>
+        <button id="filter-unseen-btn" class="btn btn-sm btn-ghost" data-i18n="sidebar.filterUnseen" data-i18n-title="sidebar.filterUnseenTitle">Sin practicar</button>
       </div>
 
-      <!-- Accordion rendered by JS -->
       <div id="accordion" class="accordion" role="list"></div>
 
       <div class="sidebar-footer">
-        <p class="sidebar-hint">Abre un set (H, U…) y un bloque (Set 1, Set 2…) para ver los casos. Usa «Cerrar» para plegar todo.</p>
+        <p class="sidebar-hint" data-i18n="sidebar.hint">Abre un set (H, U…) y un bloque (Set 1, Set 2…) para ver los casos. Usa «Cerrar» para plegar todo.</p>
+        <p class="sidebar-contact-link-wrap">
+          <a
+            class="sidebar-contact-link"
+            href="https://mail.google.com/mail/?view=cm&fs=1&to=contact@zblltrainer.com&su=Contacto%20desde%20ZBLL%20Trainer"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-i18n="sidebar.contact"
+            data-i18n-aria="sidebar.contactAria"
+          >
+            Contacto
+          </a>
+        </p>
       </div>
     </aside>
 
-    <!-- ═══════════════════════════════════════ MAIN CONTENT ══ -->
-    <main id="main-content" class="main-content" aria-label="Área principal">
+    <main id="main-content" class="main-content" aria-label="Main">
 
       <div id="practice-view" class="practice-view">
       <div id="practice-top" class="practice-top">
-        <!-- Case info bar -->
         <div id="case-info-bar" class="case-info-bar">
           <span id="info-set" class="info-badge info-set">—</span>
-          <span id="info-case" class="info-case">Selecciona casos para empezar</span>
+          <span id="info-case" class="info-case" data-i18n="practice.selectToStart">Selecciona casos para empezar</span>
           <span id="info-alg-count" class="info-alg-count"></span>
         </div>
 
-        <!-- Scramble display -->
-        <section id="scramble-section" class="scramble-section" aria-label="Scramble actual">
-          <p class="scramble-label">SCRAMBLE</p>
+        <section id="scramble-section" class="scramble-section" data-i18n-aria="practice.scrambleSection">
+          <p class="scramble-label" data-i18n="practice.scramble">SCRAMBLE</p>
           <div id="scramble-moves" class="scramble-moves" aria-live="polite">
-            <span class="scramble-placeholder">Cargando algoritmos…</span>
+            <span class="scramble-placeholder" data-i18n="practice.loading">Cargando casos…</span>
           </div>
           <div class="scramble-actions">
-            <button id="next-scramble-btn" class="btn btn-outline btn-sm" type="button" aria-label="Mostrar siguiente scramble">
+            <button id="next-scramble-btn" class="btn btn-outline btn-sm" type="button" data-i18n="practice.nextScramble" data-i18n-aria="practice.nextScrambleAria">
               ↻ Siguiente scramble
             </button>
           </div>
         </section>
       </div>
 
-      <!-- ─────────────────────────────── TIMER AREA ── -->
       <section
         id="timer-area"
         class="timer-area"
         tabindex="0"
         role="button"
-        aria-label="Cronómetro — pulsa espacio o toca para usar"
+        data-i18n-aria="timer.area"
         aria-live="polite"
       >
         <div id="timer-display" class="timer-display" data-phase="idle">
           <span id="timer-value">0.000</span>
         </div>
-        <p id="timer-hint" class="timer-hint">
+        <p id="timer-hint" class="timer-hint" data-i18n-html="timer.idle">
           Mantén <kbd>ESPACIO</kbd> o <kbd>toca</kbd> la pantalla para preparar
         </p>
       </section>
 
-      <!-- ─────────────────── RESULT (shown after solve) ── -->
-      <section id="result-section" class="result-section hidden" aria-label="Resultado de la resolución">
+      <section id="result-section" class="result-section hidden" data-i18n-aria="result.section">
         <div class="result-inner">
 
           <div class="result-time-row">
-            <span class="result-label">Tiempo:</span>
+            <span class="result-label" data-i18n="result.time">Tiempo:</span>
             <span id="result-time" class="result-time-val">—</span>
-            <button id="discard-last-time-btn" class="btn btn-sm btn-outline hidden" type="button" title="Quitar este tiempo de las estadísticas (por ejemplo, si paraste sin querer)">
+            <button id="discard-last-time-btn" class="btn btn-sm btn-outline hidden" type="button" data-i18n="result.discard" data-i18n-title="result.discardTitle">
               🗑 Descartar tiempo
             </button>
-            <button id="repeat-weak-btn" class="btn btn-sm btn-outline hidden" title="Mostrar el mismo caso en el siguiente scramble">Repetir caso</button>
-            <button id="open-study-btn" class="btn btn-sm btn-outline hidden" type="button" title="Ver algoritmos y notas de este caso">📖 Aprender caso</button>
+            <button id="repeat-weak-btn" class="btn btn-sm btn-outline hidden" data-i18n="result.repeat" data-i18n-title="result.repeatTitle">Repetir caso</button>
+            <button id="open-study-btn" class="btn btn-sm btn-outline hidden" type="button" data-i18n="result.learn" data-i18n-title="result.learnTitle">📖 Aprender caso</button>
           </div>
 
           <div class="result-case-row">
@@ -154,16 +197,17 @@
               <img
                 id="case-img"
                 class="case-img"
+                data-i18n-aria="result.caseDiagram"
                 alt="Diagrama del caso ZBLL"
                 loading="lazy"
               />
               <div id="case-img-fallback" class="case-img-fallback hidden">
-                <span>Sin imagen offline</span>
+                <span data-i18n="result.noImageOffline">Sin imagen offline</span>
               </div>
             </div>
 
             <div class="result-alg-wrap">
-              <p class="result-alg-label">Algoritmo:</p>
+              <p class="result-alg-label" data-i18n="result.algorithm">Algoritmo:</p>
               <code id="result-alg-text" class="result-alg-code"></code>
               <p class="result-alg-case">
                 <span id="result-case-name"></span>
@@ -173,11 +217,11 @@
 
         </div>
       </section>
-      </div><!-- /practice-view -->
+      </div>
 
-      <section id="study-view" class="study-view" aria-label="Modo aprendizaje">
+      <section id="study-view" class="study-view" data-i18n-aria="study.section">
         <div class="study-empty" id="study-empty">
-          <p>Elige un caso en el panel izquierdo para ver su imagen, algoritmos y tus notas.</p>
+          <p data-i18n="study.empty">Elige un caso en el panel izquierdo para ver su imagen, algoritmos y tus notas.</p>
         </div>
 
         <div id="study-detail" class="study-detail hidden">
@@ -187,57 +231,57 @@
               <h2 id="study-case-name" class="study-case-name">—</h2>
             </div>
             <div class="study-nav">
-              <button type="button" id="study-prev-btn" class="btn btn-outline btn-sm" aria-label="Caso anterior">← Anterior</button>
-              <button type="button" id="study-next-btn" class="btn btn-outline btn-sm" aria-label="Caso siguiente">Siguiente →</button>
+              <button type="button" id="study-prev-btn" class="btn btn-outline btn-sm" data-i18n="study.prev" data-i18n-aria="study.prevAria">← Anterior</button>
+              <button type="button" id="study-next-btn" class="btn btn-outline btn-sm" data-i18n="study.next" data-i18n-aria="study.nextAria">Siguiente →</button>
             </div>
           </div>
 
           <div class="study-layout">
             <div class="study-visual">
               <div class="study-img-wrap">
-                <img id="study-case-img" class="study-case-img case-img" alt="Diagrama del caso ZBLL" loading="eager" decoding="async" />
-                <div id="study-img-fallback" class="case-img-fallback hidden"><span>Sin imagen</span></div>
+                <img id="study-case-img" class="study-case-img case-img" data-i18n-aria="result.caseDiagram" alt="Diagrama del caso ZBLL" loading="eager" decoding="async" />
+                <div id="study-img-fallback" class="case-img-fallback hidden"><span data-i18n="study.noImage">Sin imagen</span></div>
               </div>
-              <button type="button" id="study-practice-btn" class="btn btn-accent">Practicar solo este caso</button>
+              <button type="button" id="study-practice-btn" class="btn btn-accent" data-i18n="study.practiceOnly">Practicar solo este caso</button>
             </div>
 
             <div class="study-fields">
               <div class="study-block study-block-setup">
-                <h3 class="study-block-title">Mezcla</h3>
+                <h3 class="study-block-title" data-i18n="study.setup">Mezcla</h3>
                 <div id="study-setup-moves" class="study-setup-moves" aria-live="polite"></div>
-                <button type="button" id="study-setup-copy-btn" class="btn btn-outline btn-sm">Copiar mezcla</button>
+                <button type="button" id="study-setup-copy-btn" class="btn btn-outline btn-sm" data-i18n="study.copySetup">Copiar mezcla</button>
               </div>
 
               <div class="study-block study-block-primary">
-                <h3 class="study-block-title">Mi algoritmo</h3>
+                <h3 class="study-block-title" data-i18n="study.myAlg">Mi algoritmo</h3>
                 <div class="study-my-alg-row">
                   <div id="study-my-alg-view" class="study-my-alg-view">
-                    <p id="study-my-alg-empty" class="study-my-alg-empty">Sin versión personalizada</p>
+                    <p id="study-my-alg-empty" class="study-my-alg-empty" data-i18n="study.noCustomAlg">Sin versión personalizada</p>
                     <p id="study-my-alg-display" class="study-my-alg-display hidden"></p>
                   </div>
-                  <button type="button" id="study-alg-edit-btn" class="study-edit-btn" aria-label="Editar mi algoritmo" title="Editar algoritmo">
+                  <button type="button" id="study-alg-edit-btn" class="study-edit-btn" data-i18n-title="study.editAlg" data-i18n-aria="study.editAlgAria">
                     <span class="study-edit-icon" aria-hidden="true">✎</span>
                   </button>
                 </div>
-                <textarea id="study-alg-input" class="study-textarea mono hidden" rows="4" placeholder="Ej: (R U R') (U') (R U2 R')"></textarea>
+                <textarea id="study-alg-input" class="study-textarea mono hidden" rows="4" data-i18n-placeholder="study.algPlaceholder" placeholder="Ej: (R U R') (U') (R U2 R')"></textarea>
 
                 <div id="study-notes-below" class="study-notes-below hidden">
                   <p id="study-notes-display" class="study-notes-display"></p>
-                  <button type="button" id="study-notes-edit-btn" class="btn btn-ghost btn-sm study-notes-edit-link">Editar observación</button>
+                  <button type="button" id="study-notes-edit-btn" class="btn btn-ghost btn-sm study-notes-edit-link" data-i18n="study.editNotes">Editar observación</button>
                 </div>
               </div>
 
               <div class="study-block">
-                <h3 class="study-block-title">Algoritmos oficiales</h3>
+                <h3 class="study-block-title" data-i18n="study.officialAlgs">Algoritmos oficiales</h3>
                 <div id="study-official-algs" class="study-official-algs"></div>
               </div>
 
               <div class="study-block" id="study-notes-block">
-                <label class="study-block-title" for="study-notes-input">Observaciones</label>
-                <textarea id="study-notes-input" class="study-textarea" rows="4" placeholder="Patrones, comparaciones con otros casos, recordatorios…"></textarea>
+                <label class="study-block-title" for="study-notes-input" data-i18n="study.notes">Observaciones</label>
+                <textarea id="study-notes-input" class="study-textarea" rows="4" data-i18n-placeholder="study.notesPlaceholder" placeholder="Patrones, comparaciones con otros casos, recordatorios…"></textarea>
               </div>
 
-              <p id="study-save-hint" class="study-save-hint" aria-live="polite">Los cambios se guardan automáticamente en este dispositivo.</p>
+              <p id="study-save-hint" class="study-save-hint" aria-live="polite" data-i18n="study.saveHint">Los cambios se guardan automáticamente en este dispositivo.</p>
             </div>
           </div>
         </div>
@@ -245,84 +289,90 @@
 
     </main>
   </div>
-  </div><!-- /app-shell -->
+  </div>
 
-  <!-- ═══════════════════════════════════════════ STATS PANEL ══ -->
-  <section id="stats-panel" class="stats-panel" aria-label="Estadísticas de práctica">
+  <section id="stats-panel" class="stats-panel" data-i18n-aria="stats.section">
     <div class="stats-header">
       <h2 class="stats-title">
         <span class="stats-icon" aria-hidden="true">📊</span>
-        Estadísticas
+        <span data-i18n="stats.title">Estadísticas</span>
       </h2>
       <div class="stats-actions">
-        <button id="export-btn" class="btn btn-outline btn-sm" aria-label="Exportar estadísticas en JSON">
+        <button id="export-btn" class="btn btn-outline btn-sm" data-i18n="stats.export" data-i18n-aria="stats.exportAria">
           ⬆ Exportar
         </button>
-        <label class="btn btn-outline btn-sm" for="import-file" aria-label="Importar estadísticas desde JSON">
-          ⬇ Importar
+        <label class="btn btn-outline btn-sm" for="import-file" data-i18n-aria="stats.importAria">
+          <span data-i18n="stats.import">⬇ Importar</span>
           <input type="file" id="import-file" accept=".json" aria-hidden="true" />
         </label>
-        <button id="clear-stats-btn" class="btn btn-danger btn-sm" aria-label="Borrar todos los tiempos">
+        <button id="clear-stats-btn" class="btn btn-danger btn-sm" data-i18n="stats.clear" data-i18n-aria="stats.clearAria">
           🗑 Limpiar
         </button>
       </div>
     </div>
 
-    <div class="stats-summary" id="stats-summary" aria-live="polite">
-      <!-- JS renders summary cards here -->
-    </div>
+    <div class="stats-summary" id="stats-summary" aria-live="polite"></div>
 
-    <div class="stats-filters" aria-label="Filtros de estadísticas">
-      <input id="stats-search" class="search-input stats-search" type="search" placeholder="Buscar caso o set…" autocomplete="off" />
+    <div class="stats-filters" data-i18n-aria="stats.filters">
+      <input id="stats-search" class="search-input stats-search" type="search" data-i18n-placeholder="stats.search" placeholder="Buscar caso o set…" autocomplete="off" />
       <select id="stats-set-filter" class="stats-select">
-        <option value="all">Todos los sets</option>
+        <option value="all" data-i18n="stats.allSets">Todos los sets</option>
       </select>
       <select id="stats-level-filter" class="stats-select">
-        <option value="all">Todos</option>
-        <option value="weak">Solo flojos</option>
-        <option value="strong">Solo dominados</option>
+        <option value="all" data-i18n="stats.allLevels">Todos</option>
+        <option value="weak" data-i18n="stats.onlyWeak">Solo flojos</option>
+        <option value="strong" data-i18n="stats.onlyStrong">Solo dominados</option>
       </select>
     </div>
 
-    <div class="stats-table-wrap" role="region" aria-label="Tabla de tiempos" tabindex="0">
+    <div class="stats-table-wrap" role="region" data-i18n-aria="stats.table" tabindex="0">
       <table id="stats-table" class="stats-table" aria-sort="none">
         <thead>
           <tr>
-            <th class="sortable" data-col="set" tabindex="0" role="columnheader" aria-sort="ascending">Set <span class="sort-arrow">↕</span></th>
-            <th class="sortable" data-col="case" tabindex="0" role="columnheader">Caso <span class="sort-arrow">↕</span></th>
-            <th class="sortable" data-col="count" tabindex="0" role="columnheader">Count <span class="sort-arrow">↕</span></th>
-            <th class="sortable" data-col="mean" tabindex="0" role="columnheader">Media <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="set" tabindex="0" role="columnheader" aria-sort="ascending"><span data-i18n="stats.colSet">Set</span> <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="case" tabindex="0" role="columnheader"><span data-i18n="stats.colCase">Caso</span> <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="count" tabindex="0" role="columnheader"><span data-i18n="stats.colCount">Count</span> <span class="sort-arrow">↕</span></th>
+            <th class="sortable" data-col="mean" tabindex="0" role="columnheader"><span data-i18n="stats.colMean">Media</span> <span class="sort-arrow">↕</span></th>
             <th class="sortable" data-col="ao5" tabindex="0" role="columnheader">Ao5 <span class="sort-arrow">↕</span></th>
             <th class="sortable" data-col="ao12" tabindex="0" role="columnheader">Ao12 <span class="sort-arrow">↕</span></th>
-            <th class="sortable" data-col="last" tabindex="0" role="columnheader">Último <span class="sort-arrow">↕</span></th>
-            <th>Acciones</th>
+            <th class="sortable" data-col="last" tabindex="0" role="columnheader"><span data-i18n="stats.colLast">Último</span> <span class="sort-arrow">↕</span></th>
+            <th><span data-i18n="stats.colActions">Acciones</span></th>
           </tr>
         </thead>
-        <tbody id="stats-tbody">
-          <!-- JS renders rows -->
-        </tbody>
+        <tbody id="stats-tbody"></tbody>
       </table>
-      <p id="stats-empty" class="stats-empty" role="status">
+      <p id="stats-empty" class="stats-empty" role="status" data-i18n-html="stats.empty">
         Aún no hay tiempos registrados.<br />¡Empieza a practicar!
       </p>
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════ TOAST ══ -->
   <div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="true"></div>
 
-  <!-- ══════════════════════════════════════════ CONFIRM MODAL ══ -->
   <div id="confirm-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-box">
-      <h3 id="modal-title" class="modal-title">¿Confirmar acción?</h3>
+      <h3 id="modal-title" class="modal-title" data-i18n="modal.confirmTitle">¿Confirmar acción?</h3>
       <p id="modal-body" class="modal-body"></p>
       <div class="modal-actions">
-        <button id="modal-cancel" class="btn btn-ghost">Cancelar</button>
-        <button id="modal-confirm" class="btn btn-danger">Confirmar</button>
+        <button id="modal-cancel" class="btn btn-ghost" data-i18n="modal.cancel">Cancelar</button>
+        <button id="modal-confirm" class="btn btn-danger" data-i18n="modal.confirm">Confirmar</button>
       </div>
     </div>
   </div>
 
+  <section class="seo-content" aria-label="ZBLL Trainer">
+    <h2 data-i18n="seo.title">Aprender ZBLL y practicar ZBLL 3x3</h2>
+    <p data-i18n="seo.p1">
+      ZBLL Trainer es una web para aprender ZBLL en 3x3 y entrenar casos con cronómetro instantáneo.
+      Incluye modo Aprender, selección de casos, mezclas cómodas para practicar y estadísticas por caso.
+    </p>
+    <p data-i18n="seo.p2">
+      Si buscas un ZBLL trainer para mejorar tus tiempos, esta app te permite practicar de forma continua
+      desde móvil o escritorio, incluso sin conexión.
+    </p>
+  </section>
+
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
