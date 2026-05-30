@@ -3,7 +3,7 @@
    Service Worker · Cache-First strategy
    ══════════════════════════════════════════════════════════════ */
 
-const APP_CACHE_NAME = 'zbll-trainer-v25';
+const APP_CACHE_NAME = 'zbll-trainer-v27';
 const THUMBS_CACHE_NAME = 'zbll-thumbs-v2'; /* fallback VisualCube */
 
 // Files to pre-cache on install (app shell + data)
@@ -19,6 +19,11 @@ const PRECACHE_URLS = [
   './robots.txt',
   './sitemap.xml',
   './zbll_cases.json',
+  './favicon.ico',
+  './favicon-32x32.png',
+  './favicon-48x48.png',
+  './favicon-96x96.png',
+  './apple-touch-icon.png',
   './icon-512.png',
 ];
 

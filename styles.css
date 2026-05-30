@@ -2069,6 +2069,13 @@ th.sort-active .sort-arrow { opacity: 1; }
   margin-bottom: 8px;
 }
 
+.seo-content h3 {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin-top: 14px;
+  margin-bottom: 6px;
+}
+
 .seo-content p + p {
   margin-top: 8px;
 }
